@@ -1,0 +1,17 @@
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: clearloop_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: clearloop_user
+      POSTGRES_PASSWORD: clearloop_pass
+      POSTGRES_DB: clearloop
+    ports:
+      - "5433:5432"
+    volumes:
+      - clearloop_data:/var/lib/postgresql/data
+
+volumes: 
+  clearloop_data:

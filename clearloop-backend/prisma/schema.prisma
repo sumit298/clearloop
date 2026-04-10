@@ -1,0 +1,259 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TenantPlan {
+  FREE
+  PRO
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  DEVELOPER
+}
+
+enum FeatureStatus {
+  PLANNED
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+  CANCELLED
+}
+
+enum FeaturePriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum PullRequestStatus {
+  OPEN
+  MERGED
+  CLOSED
+}
+
+enum BugSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum BugStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model Tenant {
+  id        String     @id @default(uuid())
+  name      String
+  slug      String     @unique
+  plan      TenantPlan @default(FREE)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  users          User[]
+  projects       Project[]
+  features       Feature[]
+  pullRequests   PullRequest[]
+  bugReports     BugReport[]
+  releases       Release[]
+  activityLogs   ActivityLog[]
+  comments       Comment[]
+
+  @@map("tenants")
+}
+
+model User {
+  id             String   @id @default(uuid())
+  tenantId       String
+  email          String
+  name           String
+  role           UserRole @default(DEVELOPER)
+  designation    String?
+  githubUsername String?
+  avatarUrl      String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant          Tenant        @relation(fields: [tenantId], references: [id])
+  projectMembers  ProjectMember[]
+  assignedFeatures Feature[]   @relation("FeatureAssignee")
+  createdFeatures  Feature[]   @relation("FeatureCreator")
+  bugReports      BugReport[]
+  comments        Comment[]
+  activityLogs    ActivityLog[]
+
+  @@unique([tenantId, email])
+  @@map("users")
+}
+
+model Project {
+  id                   String   @id @default(uuid())
+  tenantId             String
+  name                 String
+  description          String?
+  githubRepoUrl        String?
+  githubRepoId         String?
+  githubInstallationId String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id])
+  members  ProjectMember[]
+  features Feature[]
+
+  @@map("projects")
+}
+
+model ProjectMember {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([projectId, userId])
+  @@map("project_members")
+}
+
+model Feature {
+  id          String          @id @default(uuid())
+  tenantId    String
+  projectId   String
+  title       String
+  description String?
+  reason      String?
+  status      FeatureStatus   @default(PLANNED)
+  priority    FeaturePriority @default(MEDIUM)
+  createdById String
+  assignedToId String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  project      Project       @relation(fields: [projectId], references: [id])
+  createdBy    User          @relation("FeatureCreator", fields: [createdById], references: [id])
+  assignedTo   User?         @relation("FeatureAssignee", fields: [assignedToId], references: [id])
+  pullRequests PullRequest[]
+  bugReports   BugReport[]
+  releases     ReleaseFeature[]
+  comments     Comment[]
+  activityLogs ActivityLog[]
+
+  @@map("features")
+}
+
+model PullRequest {
+  id          String            @id @default(uuid())
+  tenantId    String
+  featureId   String?
+  title       String
+  description String?
+  status      PullRequestStatus @default(OPEN)
+  githubPrId  String
+  githubPrUrl String
+  author      String
+  mergedAt    DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id])
+  feature Feature? @relation(fields: [featureId], references: [id])
+
+  @@map("pull_requests")
+}
+
+model BugReport {
+  id          String      @id @default(uuid())
+  tenantId    String
+  featureId   String?
+  title       String
+  description String
+  severity    BugSeverity @default(MEDIUM)
+  status      BugStatus   @default(OPEN)
+  reportedById String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  feature    Feature? @relation(fields: [featureId], references: [id])
+  reportedBy User     @relation(fields: [reportedById], references: [id])
+  comments   Comment[]
+
+  @@map("bug_reports")
+}
+
+model Release {
+  id          String   @id @default(uuid())
+  tenantId    String
+  version     String
+  title       String
+  description String?
+  releasedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id])
+  features ReleaseFeature[]
+
+  @@map("releases")
+}
+
+model ReleaseFeature {
+  id        String @id @default(uuid())
+  releaseId String
+  featureId String
+
+  release Release @relation(fields: [releaseId], references: [id])
+  feature Feature @relation(fields: [featureId], references: [id])
+
+  @@unique([releaseId, featureId])
+  @@map("release_features")
+}
+
+model Comment {
+  id         String   @id @default(uuid())
+  tenantId   String
+  featureId  String?
+  bugReportId String?
+  userId     String
+  content    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  feature   Feature?   @relation(fields: [featureId], references: [id])
+  bugReport BugReport? @relation(fields: [bugReportId], references: [id])
+  user      User       @relation(fields: [userId], references: [id])
+
+  @@map("comments")
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  tenantId   String
+  featureId  String?
+  userId     String
+  action     String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id])
+  feature Feature? @relation(fields: [featureId], references: [id])
+  user    User     @relation(fields: [userId], references: [id])
+
+  @@map("activity_logs")
+}
