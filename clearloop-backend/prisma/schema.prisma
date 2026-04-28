@@ -1,10 +1,10 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum TenantPlan {
@@ -16,6 +16,7 @@ enum UserRole {
   ADMIN
   MANAGER
   DEVELOPER
+  VIEWER
 }
 
 enum FeatureStatus {
@@ -78,6 +79,7 @@ model User {
   tenantId       String
   email          String
   name           String
+  password       String?
   role           UserRole @default(DEVELOPER)
   designation    String?
   githubUsername String?
@@ -121,6 +123,7 @@ model ProjectMember {
   projectId String
   userId    String
   createdAt DateTime @default(now())
+  role      UserRole @default(DEVELOPER)
 
   project Project @relation(fields: [projectId], references: [id])
   user    User    @relation(fields: [userId], references: [id])
