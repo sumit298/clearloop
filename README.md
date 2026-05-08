@@ -10,7 +10,7 @@ The result:
 - Work is invisible — managers don't know progress, developers don't know priorities
 - No ownership — "who is doing this?" "is this done?"
 - No context — why was this feature built? who decided it?
-- No audit trail — when prod breaks, nobody can trace back what changed and why
+- No audit trail — when prod breaks, ˜nobody can trace back what changed and why
 - Trust breaks between manager and developer
 
 ## What ClearLoop Solves
