@@ -31,6 +31,7 @@ export class AuthService {
     });
 
     const user = tenant.users[0];
+    if(!user) throw new Error("User creation failed")
     return this.signToken(user.id, tenant.id, user.role);
   }
 
