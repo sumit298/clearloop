@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateProjectDto } from './dto/create-project.dto';
 import type { UpdateProjectDto } from './dto/update-project.dto';
@@ -55,7 +55,7 @@ export class ProjectsService {
       },
     });
     if (!project) {
-      throw new NotFoundException('project not found');
+      throw new NotFoundException('Project not found');
     }
     return project;
   }
@@ -66,7 +66,7 @@ export class ProjectsService {
     });
     if (!existing) throw new NotFoundException('Project not found');
     return this.prisma.project.update({
-      where: { id },
+      where: { id, tenantId },
       data: dto,
     });
   }
@@ -76,7 +76,7 @@ export class ProjectsService {
       where: { id, tenantId },
     });
     if (!existing) throw new NotFoundException('Project not found');
-    await this.prisma.project.delete({ where: { id } });
+    await this.prisma.project.delete({ where: { id, tenantId } });
     return { message: 'Project deleted successfully' };
   }
 
@@ -85,7 +85,7 @@ export class ProjectsService {
       where: { id: projectId, tenantId },
     });
 
-    if (!projectId) {
+    if (!project) {
       throw new NotFoundException('Project not found');
     }
 
@@ -94,6 +94,13 @@ export class ProjectsService {
     });
 
     if (!user) throw new NotFoundException('User not found');
+    const existingMember = await this.prisma.projectMember.findFirst({
+      where: { projectId, userId },
+    });
+
+    if (existingMember) {
+      throw new ConflictException('User is already a member of this project');
+    }
 
     return this.prisma.projectMember.create({
       data: {

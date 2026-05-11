@@ -15,6 +15,7 @@ import type { UpdateProjectDto } from './dto/update-project.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
+import type { AuthenticatedRequest } from '../common/interfaces/authenticated-request.interface';
 
 @Controller('projects')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
@@ -23,24 +24,24 @@ export class ProjectsController {
 
   @Post()
   @Roles('ADMIN', 'MANAGER')
-  create(@Request() req: any, @Body() dto: CreateProjectDto) {
+  create(@Request() req: AuthenticatedRequest, @Body() dto: CreateProjectDto) {
     return this.projectsService.create(req.tenantId, dto);
   }
 
   @Get()
-  findAll(@Request() req: any) {
+  findAll(@Request() req: AuthenticatedRequest) {
     return this.projectsService.findAll(req.tenantId);
   }
 
   @Get(':id')
-  findOne(@Request() req: any, @Param('id') id: string) {
+  findOne(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.projectsService.findOne(req.tenantId, id);
   }
 
   @Patch(':id')
   @Roles('ADMIN', 'MANAGER')
   update(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() dto: UpdateProjectDto,
   ) {
@@ -49,14 +50,14 @@ export class ProjectsController {
 
   @Delete(':id')
   @Roles('ADMIN')
-  remove(@Request() req: any, @Param('id') id: string) {
+  remove(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.projectsService.remove(req.tenantId, id);
   }
 
   @Post(':id/members')
   @Roles('ADMIN', 'MANAGER')
   addMember(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id') projectId: string,
     @Body('userId') userId: string,
   ) {
@@ -66,7 +67,7 @@ export class ProjectsController {
   @Delete(':id/members/:userId')
   @Roles('ADMIN', 'MANAGER')
   removeMember(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id') projectId: string,
     @Param('userId') userId: string,
   ) {

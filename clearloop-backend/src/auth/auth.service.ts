@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, ConflictException, UnauthorizedException, InternalServerErrorException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
@@ -31,7 +31,7 @@ export class AuthService {
     });
 
     const user = tenant.users[0];
-    if(!user) throw new Error("User creation failed")
+    if (!user) throw new InternalServerErrorException('User creation failed');
     return this.signToken(user.id, tenant.id, user.role);
   }
 
