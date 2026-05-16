@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ProjectsService } from './project.service';
 import type { CreateProjectDto } from './dto/create-project.dto';
-import type { UpdateProjectDto } from './dto/update-project.dto';
+import type { AddMemberDto, UpdateProjectDto } from './dto/update-project.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
@@ -59,9 +59,9 @@ export class ProjectsController {
   addMember(
     @Request() req: AuthenticatedRequest,
     @Param('id') projectId: string,
-    @Body('userId') userId: string,
+    @Body() dto: AddMemberDto,
   ) {
-    return this.projectsService.addMember(req.tenantId, projectId, userId);
+    return this.projectsService.addMember(req.tenantId, projectId, dto.userId);
   }
 
   @Delete(':id/members/:userId')

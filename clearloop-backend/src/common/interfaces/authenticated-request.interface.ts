@@ -2,10 +2,11 @@ import { Request } from 'express';
 
 export interface AuthenticatedRequest extends Request {
   tenantId: string;
+  
   user: {
-    id: string;
+    userId: string;
     email: string;
-    roles: string[];
+    role: string[];
     // Add other user properties
   };
 }

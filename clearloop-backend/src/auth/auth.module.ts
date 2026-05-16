@@ -17,7 +17,7 @@ import { RolesGuard } from './guards/roles.guard';
       signOptions: { expiresIn: '7d' },
     }),
   ],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, JwtAuthGuard, RolesGuard],
   controllers: [AuthController],
   exports: [JwtAuthGuard, RolesGuard],
 })

@@ -18,6 +18,7 @@ import type {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
+import type { AuthenticatedRequest } from '../common/interfaces/authenticated-request.interface';
 
 @Controller('features')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
@@ -26,7 +27,7 @@ export class FeaturesController {
 
   @Post()
   @Roles('ADMIN', 'MANAGER', 'DEVELOPER')
-  create(@Request() req, @Body() createFeatureDto: CreateFeatureDto) {
+  create(@Request() req: AuthenticatedRequest, @Body() createFeatureDto: CreateFeatureDto) {
     return this.featuresService.create(
       req.tenantId,
       req.user.userId,
@@ -35,19 +36,19 @@ export class FeaturesController {
   }
 
   @Get()
-  findAll(@Request() req: any, @Query('projectId') projectId?: string) {
+  findAll(@Request() req: AuthenticatedRequest, @Query('projectId') projectId?: string) {
     return this.featuresService.findAll(req.tenantId, projectId);
   }
 
   @Get(':id')
-  findOne(@Request() req, @Param('id') id: string) {
+  findOne(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.featuresService.findOne(req.tenantId, id);
   }
 
   @Patch(':id')
   @Roles('ADMIN', 'MANAGER', 'DEVELOPER')
   update(
-    @Request() req,
+    @Request() req: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() updateFeatureDto: UpdateFeatureDto,
   ) {
@@ -61,7 +62,7 @@ export class FeaturesController {
 
   @Delete(':id')
   @Roles('ADMIN', 'MANAGER')
-  remove(@Request() req, @Param('id') id: string) {
+  remove(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.featuresService.remove(req.tenantId, req.user.userId, id);
   }
 }
