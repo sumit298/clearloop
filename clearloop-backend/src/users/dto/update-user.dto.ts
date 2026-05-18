@@ -1,24 +1,40 @@
 import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator';
 import { UserRole } from '@prisma/client';
 
-export class UpdateUserDto {
+// Users can update their own profile with these fields
+export class UpdateOwnProfileDto {
   @IsString()
   @IsOptional()
   name?: string;
-
-  @IsEnum(UserRole)
-  @IsOptional()
-  role?: UserRole;
 
   @IsString()
   @IsOptional()
   designation?: string;
 
-  @IsBoolean()
+  @IsString()
   @IsOptional()
-  isActive?: boolean;
+  githubUsername?: string;
+}
+
+// Admins/Managers can update these fields for others
+export class UpdateUserDto {
+  @IsString()
+  @IsOptional()
+  name?: string;
+
+  @IsString()
+  @IsOptional()
+  designation?: string;
 
   @IsString()
   @IsOptional()
   githubUsername?: string;
+
+  @IsEnum(UserRole)
+  @IsOptional()
+  role?: UserRole;
+
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
 }

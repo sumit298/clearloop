@@ -10,8 +10,10 @@ export class ProjectsService {
   async create(tenantId: string, dto: CreateProjectDto) {
     return this.prisma.project.create({
       data: {
-        ...dto,
         tenantId,
+        name: dto.name,
+        description: dto.description,
+        githubRepoUrl: dto.githubRepoUrl,
       },
     });
   }

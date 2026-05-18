@@ -2,10 +2,11 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateUserDto } from './dto/create-user.dto';
-import type { UpdateUserDto } from './dto/update-user.dto';
+import type { UpdateOwnProfileDto, UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UserService {
@@ -107,13 +108,47 @@ export class UserService {
     return user;
   }
 
-  async update(tenantId: string, id: string, dto: UpdateUserDto) {
+  async updateOwnProfile(tenantId: string, userId: string, dto: UpdateOwnProfileDto){
     const existing = await this.prisma.user.findFirst({
-      where: { id, tenantId },
-    });
+      where: { id: userId, tenantId}
+    })
+
+    if(!existing) throw new NotFoundException("User not found");
 
     return this.prisma.user.update({
-      where: { id, tenantId },
+      where: { id: userId },
+      data: dto,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        designation: true,
+        isActive: true,
+        githubUsername: true,
+        avatarUrl: true,
+      }
+    });
+    
+  }
+
+  async update(tenantId: string, targetUserId: string, currentUserRole: string, dto: UpdateUserDto) {
+    const existing = await this.prisma.user.findFirst({
+      where: { id: targetUserId, tenantId },
+    });
+
+    if(!existing) throw new NotFoundException('User not found');
+
+    if(dto.role && currentUserRole !== 'ADMIN'){
+      throw new ForbiddenException('You do not have permission to change roles');
+    }
+
+    if(dto.isActive !== undefined && currentUserRole!== 'ADMIN'){
+      throw new ForbiddenException('You do not have permission to change activation status');
+    }
+
+    return this.prisma.user.update({
+      where: { id: targetUserId },
       data: dto,
       select: {
         id: true,
@@ -136,7 +171,7 @@ export class UserService {
     if (!existing) throw new NotFoundException('User not found');
 
     await this.prisma.user.update({
-      where: { id, tenantId },
+      where: { id },
       data: { isActive: false },
     });
     return { message: 'User deactivated successfully' };
@@ -150,7 +185,7 @@ export class UserService {
     if (!existing) throw new NotFoundException('User not found');
 
     await this.prisma.user.update({
-      where: { id, tenantId },
+      where: { id },
       data: { isActive: true },
     });
     return { message: 'User reactivated successfully' };
