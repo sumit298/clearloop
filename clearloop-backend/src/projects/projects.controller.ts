@@ -10,8 +10,8 @@ import {
   Delete,
 } from '@nestjs/common';
 import { ProjectsService } from './project.service';
-import type { CreateProjectDto } from './dto/create-project.dto';
-import type { AddMemberDto, UpdateProjectDto } from './dto/update-project.dto';
+import { CreateProjectDto } from './dto/create-project.dto';
+import { AddMemberDto, UpdateProjectDto } from './dto/update-project.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';

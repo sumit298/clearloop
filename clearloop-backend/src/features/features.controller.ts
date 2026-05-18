@@ -11,7 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { FeaturesService } from './features.service';
-import type {
+import {
   CreateFeatureDto,
   UpdateFeatureDto,
 } from './dto/create-feature.dto';

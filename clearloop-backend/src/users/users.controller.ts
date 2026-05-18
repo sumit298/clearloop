@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Delete,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
@@ -15,7 +16,7 @@ import { Roles, RolesGuard } from '../auth/guards/roles.guard';
 import { UserService } from './users.service';
 import type { AuthenticatedRequest } from '../common/interfaces/authenticated-request.interface';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateOwnProfileDto, UpdateUserDto } from './dto/update-user.dto';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
@@ -33,10 +34,28 @@ export class UsersController {
     return this.userService.findAll(req.tenantId);
   }
 
+  @Get('me')
+  getOwnProfile(@Request() req: AuthenticatedRequest) {
+    return this.userService.findOne(req.tenantId, req.user.userId);
+  }
+
   @Get(':id')
   findOne(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.userService.findOne(req.tenantId, id);
   }
+
+
+  @Patch("me")
+  updateOwnProfile(
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: UpdateOwnProfileDto,
+  ) {
+    return this.userService.updateOwnProfile(
+      req.tenantId,
+      req.user.userId,
+      dto,
+    );
+  } 
 
   @Patch(':id')
   @Roles('ADMIN', 'MANAGER')
@@ -45,7 +64,10 @@ export class UsersController {
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,
   ) {
-    return this.userService.update(req.tenantId, id, dto);
+    if(id === req.user.userId) {
+      throw new ForbiddenException("Use Patch /users/me to update your own profile")
+    }
+    return this.userService.update(req.tenantId, id, req.user.role, dto);
   }
 
   @Delete(':id/deactivate')
