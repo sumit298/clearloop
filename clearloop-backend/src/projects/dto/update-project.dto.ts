@@ -12,6 +12,14 @@ export class UpdateProjectDto {
     @IsUrl()
     @IsOptional()
     githubRepoUrl?: string;
+
+    @IsString()
+    @IsOptional()
+    githubRepoId?: string;
+
+    @IsString()
+    @IsOptional()
+    githubInstallationId?: string;
 }
 
 export class AddMemberDto {

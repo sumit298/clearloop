@@ -101,31 +101,35 @@ export class GithubController {
    * Verify GitHub webhook signature
    */
   private verifyWebhookSignature(rawBody: Buffer | undefined, signature: string) {
-    if (!signature) {
-      throw new BadRequestException('Missing signature');
-    }
-
-    if(!rawBody) {
-      throw new BadRequestException('Missing request body');
-    }
-
-    const secret = process.env.GITHUB_WEBHOOK_SECRET!;
-    if (!secret) {
-      // If no secret configured, skip verification (dev mode)
-      return;
-    }
-    const hmac = crypto.createHmac('sha256', secret);
-    const expectedSignature = 'sha256=' + hmac.update(rawBody).digest('hex');
-
-    const sigBuffer = Buffer.from(signature, 'utf-8');
-    const expectedBuffer = Buffer.from(expectedSignature, 'utf-8');
-
-    if (sigBuffer.length !== expectedBuffer.length) {
-      throw new BadRequestException('Invalid signature');
-    }
-
-    if(!crypto.timingSafeEqual(sigBuffer, expectedBuffer) ) {
-      throw new BadRequestException('Invalid signature');
-    }
+  const secret = process.env.GITHUB_WEBHOOK_SECRET;
+  
+  // If no secret configured, skip verification (dev mode)
+  if (!secret) {
+    console.log('⚠️  Webhook signature verification skipped (no secret configured)');
+    return;
   }
+
+  if (!signature) {
+    throw new BadRequestException('Missing signature');
+  }
+
+  if (!rawBody) {
+    throw new BadRequestException('Missing request body');
+  }
+
+  const hmac = crypto.createHmac('sha256', secret);
+  const expectedSignature = 'sha256=' + hmac.update(rawBody).digest('hex');
+
+  const sigBuffer = Buffer.from(signature, 'utf-8');
+  const expectedBuffer = Buffer.from(expectedSignature, 'utf-8');
+
+  if (sigBuffer.length !== expectedBuffer.length) {
+    throw new BadRequestException('Invalid signature');
+  }
+
+  if (!crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
+    throw new BadRequestException('Invalid signature');
+  }
+}
+
 }
