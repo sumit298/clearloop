@@ -24,46 +24,49 @@ export class BugReportsService {
       }
     }
 
-    const bugReport = await this.prisma.bugReport.create({
-      data: {
-        tenantId,
-        reportedById: userId,
-        title: dto.title,
-        description: dto.description,
-        severity: dto.severity || 'MEDIUM',
-        featureId: dto.featureId,
-      },
-      include: {
-        feature: {
-          select: {
-            id: true,
-            title: true,
-          },
-        },
-        reportedBy: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-    });
-
-    if (dto.featureId) {
-      await this.prisma.activityLog.create({
+    const bugReport = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.bugReport.create({
         data: {
           tenantId,
+          reportedById: userId,
+          title: dto.title,
+          description: dto.description,
+          severity: dto.severity || 'MEDIUM',
           featureId: dto.featureId,
-          userId,
-          action: 'BUG_REPORTED',
-          metadata: {
-            bugReportId: bugReport.id,
-            title: dto.title,
-            severity: bugReport.severity,
+        },
+        include: {
+          feature: {
+            select: {
+              id: true,
+              title: true,
+            },
+          },
+          reportedBy: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
         },
       });
-    }
+      if (dto.featureId) {
+        await tx.activityLog.create({
+          data: {
+            tenantId,
+            featureId: dto.featureId,
+            userId: userId,
+            action: 'BUG_REPORTED',
+            metadata: {
+              bugReportId: created.id,
+              title: dto.title,
+              severity: created.severity,
+            },
+          },
+        });
+      }
+      return created;
+    });
+
     return bugReport;
   }
 
@@ -167,34 +170,38 @@ export class BugReportsService {
       }
     }
 
-    const updated = await this.prisma.bugReport.update({
-      where: { id },
-      data: dto,
-      include: {
-        feature: {
-          select: { id: true, title: true },
-        },
-        reportedBy: {
-          select: { id: true, name: true, email: true },
-        },
-      },
-    });
-
-    if (dto.status && bugReport.featureId) {
-      await this.prisma.activityLog.create({
-        data: {
-          tenantId,
-          featureId: bugReport.featureId,
-          userId,
-          action: 'BUG_STATUS_UPDATED',
-          metadata: {
-            bugReportId: bugReport.id,
-            oldStatus: bugReport.status,
-            newStatus: dto.status,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.bugReport.update({
+        where: { id },
+        data: dto,
+        include: {
+          feature: {
+            select: { id: true, title: true },
+          },
+          reportedBy: {
+            select: { id: true, name: true, email: true },
           },
         },
       });
-    }
+
+      if (dto.status && bugReport.featureId) {
+        await tx.activityLog.create({
+          data: {
+            tenantId,
+            featureId: bugReport.featureId,
+            userId,
+            action: 'BUG_STATUS_UPDATED',
+            metadata: {
+              bugReportId: bugReport.id,
+              oldStatus: bugReport.status,
+              newStatus: dto.status,
+            },
+          },
+        });
+      }
+
+      return result;
+    });
 
     return updated;
   }
