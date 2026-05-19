@@ -64,3 +64,6 @@ API_QUICK_REFERENCE.md
 API_TESTING_GUIDE.md
 yarn.lock
 test-api.js
+setup-test-data.js
+test-data.json
+test-webhook.js

@@ -7,14 +7,17 @@ import * as bodyParser from 'body-parser';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Capture raw body for webhook signature verification
+  // Capture raw body ONLY for webhook signature verification
   app.use('/github/webhook', bodyParser.json({
     verify: (req: any, res, buf) => {
       req.rawBody = buf;
     },
   }));
 
-  // Global validation pipe for other routes
+  // Default JSON parser for all other routes
+  app.use(bodyParser.json());
+
+  // Global validation pipe
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
