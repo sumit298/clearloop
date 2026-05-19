@@ -7,6 +7,7 @@ import {
   UseGuards,
   Request,
   Param,
+  Req,
   Headers,
   BadRequestException,
 } from '@nestjs/common';
@@ -26,12 +27,13 @@ export class GithubController {
    */
   @Post('webhook')
   async handleWebHook(
+    @Req() req: Request & { rawBody?: Buffer},
     @Body() payload: GitHubWebhookDto,
     @Headers('x-hub-signature-256') signature: string,
     @Headers('x-github-event') event: string,
   ) {
     if (process.env.GITHUB_WEBHOOK_SECRET) {
-      this.verifyWebhookSignature(JSON.stringify(payload), signature);
+      this.verifyWebhookSignature(req.rawBody, signature);
     }
 
     if (event !== 'pull_request') {
@@ -98,16 +100,31 @@ export class GithubController {
   /**
    * Verify GitHub webhook signature
    */
-  private verifyWebhookSignature(payload: string, signature: string) {
+  private verifyWebhookSignature(rawBody: Buffer | undefined, signature: string) {
     if (!signature) {
       throw new BadRequestException('Missing signature');
     }
 
-    const secret = process.env.GITHUB_WEBHOOK_SECRET!;
-    const hmac = crypto.createHmac('sha256', secret);
-    const digest = 'sha256=' + hmac.update(payload).digest('hex');
+    if(!rawBody) {
+      throw new BadRequestException('Missing request body');
+    }
 
-    if (signature !== digest) {
+    const secret = process.env.GITHUB_WEBHOOK_SECRET!;
+    if (!secret) {
+      // If no secret configured, skip verification (dev mode)
+      return;
+    }
+    const hmac = crypto.createHmac('sha256', secret);
+    const expectedSignature = 'sha256=' + hmac.update(rawBody).digest('hex');
+
+    const sigBuffer = Buffer.from(signature, 'utf-8');
+    const expectedBuffer = Buffer.from(expectedSignature, 'utf-8');
+
+    if (sigBuffer.length !== expectedBuffer.length) {
+      throw new BadRequestException('Invalid signature');
+    }
+
+    if(!crypto.timingSafeEqual(sigBuffer, expectedBuffer) ) {
       throw new BadRequestException('Invalid signature');
     }
   }
