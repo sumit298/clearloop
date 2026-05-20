@@ -1,26 +1,199 @@
 @import "tailwindcss";
 
+@theme {
+  --color-background: #07090d;
+  --color-foreground: #f3f5f7;
+
+  --color-surface: #0d1117;
+  --color-surface-secondary: #121722;
+  --color-surface-tertiary: #171d2a;
+  --color-surface-elevated: #1b2330;
+  --color-surface-2: #121722;
+
+  --color-border: #1b2330;
+  --color-border-subtle: #161c28;
+  --color-border-strong: #283244;
+
+  --color-text-primary: #f3f5f7;
+  --color-text-secondary: #c5bfcc;
+  --color-text-muted: #8b93a7;
+  --color-text-faint: #535261;
+  --color-text-dim: #c5bfcc;
+
+  --color-primary: #554091;
+  --color-primary-hover: #8739d5;
+  --color-primary-soft: #b1a3fa;
+  --color-primary-foreground: #f3f5f7;
+
+  --color-success: #4ebd4e;
+  --color-warning: #e7b41f;
+  --color-danger: #da4545;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 22px;
+
+  --font-sans: "Inter", "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  html {
+    scroll-behavior: smooth;
+    background-color: var(--color-background);
+  }
+
+  body {
+    background:
+      radial-gradient(
+        circle at top,
+        rgba(135, 57, 213, 0.06),
+        transparent 35%
+      ),
+      var(--color-background);
+
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01", "ss03";
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    letter-spacing: -0.03em;
+  }
+
+  ::selection {
+    background: rgba(135, 57, 213, 0.35);
+    color: white;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #0b0f14;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #242d3d;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #323d52;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  .surface {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+  }
+
+  .surface-secondary {
+    background: var(--color-surface-secondary);
+    border: 1px solid var(--color-border-subtle);
+  }
+
+  .surface-elevated {
+    background: var(--color-surface-elevated);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+  }
+
+  .surface-2 {
+    background: var(--color-surface-2);
+  }
+
+  .text-secondary {
+    color: var(--color-text-secondary);
+  }
+
+  .text-muted {
+    color: var(--color-text-muted);
+  }
+
+  .text-faint {
+    color: var(--color-text-faint);
+  }
+
+  .text-dim {
+    color: var(--color-text-dim);
+  }
+
+  .text-text-dim {
+    color: var(--color-text-dim);
+  }
+
+  .divider {
+    border-color: rgba(255, 255, 255, 0.04);
+  }
+
+  .card-glow {
+    box-shadow:
+      0 0 30px rgba(135, 57, 213, 0.08),
+      0 0 80px rgba(85, 64, 145, 0.06);
+  }
+
+  .glass {
+    background: rgba(13, 17, 23, 0.72);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+  }
+
+  .noise-bg {
+    position: relative;
+  }
+
+  .noise-bg::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 4px 4px;
+    pointer-events: none;
+    opacity: 0.4;
+  }
+
+  .grid-bg {
+    background-image:
+      linear-gradient(to right, rgba(27, 35, 48, 0.5) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(27, 35, 48, 0.5) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+
+  .grid-bg-fade {
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 75%);
+  }
+
+  .hairline {
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tracking-tightest {
+    letter-spacing: -0.04em;
+  }
 }
