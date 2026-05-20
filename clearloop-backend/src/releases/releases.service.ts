@@ -221,12 +221,12 @@ export class ReleaseService {
       throw new NotFoundException('Release not found');
     }
 
-    const releaseFeature = await this.prisma.feature.findFirst({
-      where: { id: featureId, tenantId },
+    const releaseFeature = await this.prisma.releaseFeature.findFirst({
+      where: { id: releaseId, tenantId },
     });
 
     if (!releaseFeature) {
-      throw new NotFoundException('Feature not found');
+      throw new NotFoundException('Feature is not linked to release');
     }
 
     await this.prisma.releaseFeature.delete({
