@@ -14,7 +14,7 @@ export default function Home() {
       {/* Hero */}
       <section className="relative overflow-hidden border-b border-border">
         <div className="pointer-events-none absolute inset-0 grid-bg grid-bg-fade opacity-60" />
-        <div className="relative mx-auto max-w-[1200px] px-6 pt-20 pb-16 md:pt-28 md:pb-24">
+        <div className="relative mx-auto max-w-300 px-6 pt-20 pb-16 md:pt-28 md:pb-24">
           <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-text-muted">
             <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary-soft" />
             v1.4 · audit-grade event timeline now in beta
@@ -76,7 +76,7 @@ export default function Home() {
 
       {/* Context Timeline */}
       <section id="timeline" className="border-y border-border bg-surface-2/20">
-        <div className="mx-auto max-w-[1200px] px-6 py-24">
+        <div className="mx-auto max-w-300 px-6 py-24">
           <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
             <div>
               <SectionLabel index="03" label="Timeline" />
@@ -103,8 +103,8 @@ export default function Home() {
 
       {/* Final CTA */}
       <section id="start" className="relative border-y border-border bg-background">
-        <div className="pointer-events-none absolute inset-0 grid-bg opacity-40 [mask-image:radial-gradient(ellipse_60%_70%_at_50%_50%,black_20%,transparent_75%)]" />
-        <div className="relative mx-auto max-w-[1100px] px-6 py-28 text-center">
+        <div className="pointer-events-none absolute inset-0 grid-bg opacity-40 mask-[radial-gradient(ellipse_60%_70%_at_50%_50%,black_20%,transparent_75%)]" />
+        <div className="relative mx-auto max-w-275 px-6 py-28 text-center">
           <SectionLabel index="06" label="Get started" />
           <h2 className="mx-auto mt-8 max-w-3xl text-balance text-4xl font-semibold leading-[1.05] tracking-tightest text-foreground sm:text-5xl">
             Stop reconstructing context.<br />
