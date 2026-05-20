@@ -169,6 +169,8 @@ model PullRequest {
   githubPrId  String
   githubPrUrl String
   author      String
+  branchName  String?          
+  aiSummary   String?   
   mergedAt    DateTime?
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
