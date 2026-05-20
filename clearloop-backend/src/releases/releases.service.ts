@@ -222,7 +222,7 @@ export class ReleaseService {
     }
 
     const releaseFeature = await this.prisma.releaseFeature.findFirst({
-      where: { id: releaseId, featureId: featureId },
+      where: { releaseId: releaseId, featureId: featureId },
     });
 
     if (!releaseFeature) {
