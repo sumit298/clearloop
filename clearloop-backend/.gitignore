@@ -67,3 +67,6 @@ test-api.js
 setup-test-data.js
 test-data.json
 test-webhook.js
+AUTH_FLOW_ARCHITECTURE.md
+OAUTH_IMPLEMENTATION.md
+SIMPLE_AUTH_IMPLEMENTATION.md
