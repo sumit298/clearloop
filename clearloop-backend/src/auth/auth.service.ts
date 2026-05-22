@@ -69,6 +69,9 @@ export class AuthService {
   async validateOAuthUser(profile: any, provider: 'google' | 'github') {
     const { email, name, avatarUrl, tenant } = profile;
 
+    if(!email){
+      throw new UnauthorizedException("Email is required for authentication")
+    }
     const providerId =
       provider === 'google' ? profile.googleId : profile.githubId;
 
