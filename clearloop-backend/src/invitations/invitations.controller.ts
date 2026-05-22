@@ -58,11 +58,12 @@ export class InvitationsController {
       role: result.user.role,
     });
 
+    const { password, ...safeUser}  = result.user;
     return {
       access_token,
-      user: result.user,
-      tenant: result.tenant,
-    };
+      user: safeUser ,
+      tenant: result.tenant
+    }
   }
 
   @Post(':id/resend')

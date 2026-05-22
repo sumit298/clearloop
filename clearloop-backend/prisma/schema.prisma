@@ -89,7 +89,7 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   googleId       String?  @unique
-  githubId       String?
+  githubId       String?  @unique
 
   invitedBy String?
   invitedAt DateTime?

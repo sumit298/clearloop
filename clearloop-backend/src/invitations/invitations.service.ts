@@ -27,8 +27,13 @@ export class InvitationsService {
     }
 
     const existingInvite = await this.prisma.invitation.findFirst({
-      where: { tenantId, email },
-    });
+      where: {
+        tenantId,
+        email,
+        acceptedAt: null,
+        expiresAt: { gte: new Date() }, 
+      }
+    })
 
     if (existingInvite) {
       throw new BadRequestException('Invite already sent');
@@ -76,6 +81,10 @@ export class InvitationsService {
 
     if (invitation.acceptedAt) {
       throw new BadRequestException('Invitation already accepted');
+    }
+
+    if(invitation.expiresAt === null){
+      throw new BadRequestException('Invitation expired');
     }
 
     if (invitation.expiresAt < new Date()) {
