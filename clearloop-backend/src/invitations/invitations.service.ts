@@ -83,11 +83,7 @@ export class InvitationsService {
       throw new BadRequestException('Invitation already accepted');
     }
 
-    if(invitation.expiresAt === null){
-      throw new BadRequestException('Invitation expired');
-    }
-
-    if (invitation.expiresAt < new Date()) {
+    if (invitation.expiresAt && invitation.expiresAt < new Date()) {
       throw new BadRequestException('Invitation expired');
     }
 
