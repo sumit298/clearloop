@@ -10,6 +10,7 @@ import { GithubModule } from './github/github.module';
 import { BugReportsModule } from './bug-reports/bug-report.module';
 import { ReleasesModule } from './releases/releases.module';
 import { CommentsModule } from './comments/comments.module';
+import { InvitationsModule } from './invitations/invitations.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { CommentsModule } from './comments/comments.module';
     BugReportsModule,
     ReleasesModule,
     CommentsModule,
+    InvitationsModule
   ],
   controllers: [AppController],
   providers: [AppService],
