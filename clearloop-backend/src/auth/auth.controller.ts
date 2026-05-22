@@ -39,7 +39,7 @@ export class AuthController {
   @UseGuards(GoogleAuthGuard)
   async googleAuth(@Query('tenant') tenant: string) {
     // Guard handles redirect to Google
-    if (tenant) {
+    if (!tenant) {
       throw new BadRequestException('Tenant parameter is required');
     }
   }
@@ -68,7 +68,7 @@ export class AuthController {
       const frontendUrl = this.configService.get('FRONTEND_URL')!;
       const tenant = req.user?.tenant || 'default';
       res.redirect(
-        `${frontendUrl}/${tenant}/auth/callback?error=${encodeURIComponent(error instanceof Error ? error.message : "Authentication failed")}`,
+        `${frontendUrl}/${tenant}/auth/callback?error=${encodeURIComponent(error instanceof Error ? error.message : 'Authentication failed')}`,
       );
     }
   }
@@ -78,7 +78,7 @@ export class AuthController {
   @UseGuards(GithubAuthGuard)
   async githubAuth(@Query('tenant') tenant: string) {
     // Guard handles redirect to GitHub
-    if (tenant) {
+    if (!tenant) {
       throw new BadRequestException('Tenant parameter is required');
     }
   }
@@ -86,13 +86,29 @@ export class AuthController {
   @Get('github/callback')
   @UseGuards(GithubAuthGuard)
   async githubAuthCallback(@Req() req, @Res() res) {
-    const result = await this.authService.validateOAuthUser(req.user, 'github');
-    const frontendUrl = this.configService.get('FRONTEND_URL')!;
-    const tenant = req.user.tenant;
+    try {
+      const result = await this.authService.validateOAuthUser(
+        req.user,
+        'github',
+      );
+      const frontendUrl = this.configService.get('FRONTEND_URL');
+      if (!frontendUrl) {
+        throw new InternalServerErrorException(
+          'FRONTEND_URL is not configured',
+        );
+      }
+      const tenant = req.user.tenant;
 
-    // Redirect to frontend with token
-    res.redirect(
-      `${frontendUrl}/${tenant}/auth/callback?token=${result.access_token}`,
-    );
+      // Redirect to frontend with token
+      res.redirect(
+        `${frontendUrl}/${tenant}/auth/callback?token=${result.access_token}`,
+      );
+    } catch (error) {
+      const frontendUrl = this.configService.get('FRONTEND_URL')!;
+      const tenant = req.user?.tenant || 'default';
+      res.redirect(
+        `${frontendUrl}/${tenant}/auth/callback?error=${encodeURIComponent(error instanceof Error ? error.message : 'Authentication failed')}`,
+      );
+    }
   }
 }

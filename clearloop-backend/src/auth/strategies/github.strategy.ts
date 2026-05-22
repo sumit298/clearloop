@@ -29,7 +29,7 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
       email: emails?.[0]?.value,
       name: displayName || username,
       githubUsername: username,
-      avatarUrl: photos[0]?.value,
+      avatarUrl: photos?.[0]?.value,
       provider: 'github',
       // Extract tenant from state parameter
       tenant: (() => {
