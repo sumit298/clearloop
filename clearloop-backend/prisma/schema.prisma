@@ -88,8 +88,9 @@ model User {
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-  googleId       String?  @unique
-  githubId       String?  @unique
+  googleId       String? 
+  githubId       String?  
+  oauthProvider  String?
 
   invitedBy String?
   invitedAt DateTime?
@@ -103,6 +104,8 @@ model User {
   activityLogs     ActivityLog[]
 
   @@unique([tenantId, email])
+  @@unique([googleId])
+  @@unique([githubId])
   @@map("users")
 }
 
