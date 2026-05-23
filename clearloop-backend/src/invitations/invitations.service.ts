@@ -7,10 +7,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { UserRole } from '@prisma/client';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class InvitationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
 
   async create(
     tenantId: string,
@@ -31,9 +35,9 @@ export class InvitationsService {
         tenantId,
         email,
         acceptedAt: null,
-        expiresAt: { gte: new Date() }, 
-      }
-    })
+        expiresAt: { gte: new Date() },
+      },
+    });
 
     if (existingInvite) {
       throw new BadRequestException('Invite already sent');
@@ -42,7 +46,7 @@ export class InvitationsService {
     const token = randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    return this.prisma.invitation.create({
+    const invitation = this.prisma.invitation.create({
       data: {
         tenantId,
         email,
@@ -57,6 +61,22 @@ export class InvitationsService {
         },
       },
     });
+
+    try {
+      const inviter = await this.prisma.user.findUnique({
+        where: { id: invitedBy },
+        select: { name: true },
+      });
+
+      await this.emailService.sendInvitationEmail(
+        email,
+        inviter?.name || 'Someone',
+        invitation.tenant.name,
+        token,
+      );
+    } catch (error) {
+      console.error('Failed to send invitation email:', error);
+    }
   }
 
   async validate(token: string) {
@@ -76,8 +96,6 @@ export class InvitationsService {
     if (!invitation) {
       throw new NotFoundException('Invitation not found');
     }
-
-
 
     if (invitation.acceptedAt) {
       throw new BadRequestException('Invitation already accepted');
@@ -143,6 +161,11 @@ export class InvitationsService {
   async resend(tenantId: string, id: string) {
     const invitation = await this.prisma.invitation.findFirst({
       where: { id, tenantId },
+      include: {
+        tenant: {
+          select: { id: true, name: true, slug: true}
+        }
+      }
     });
 
     if (!invitation) {
@@ -156,7 +179,7 @@ export class InvitationsService {
     // Extend expiration
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    return this.prisma.invitation.update({
+    const updated = await this.prisma.invitation.update({
       where: { id },
       data: { expiresAt },
       include: {
@@ -169,5 +192,23 @@ export class InvitationsService {
         },
       },
     });
+
+    try {
+      const inviter = await this.prisma.user.findUnique({
+        where: { id: updated.invitedBy || '' },
+        select: { name: true },
+      })
+
+      await this.emailService.sendInvitationEmail(
+        invitation.email,
+        inviter?.name || 'Someone',
+        invitation.tenant.name,
+        invitation.token
+      )
+    } catch (error) {
+      console.error('Failed to resend invitation email:', error);
+
+    }
+    return updated;
   }
 }
