@@ -11,9 +11,13 @@ import { BugReportsModule } from './bug-reports/bug-report.module';
 import { ReleasesModule } from './releases/releases.module';
 import { CommentsModule } from './comments/comments.module';
 import { InvitationsModule } from './invitations/invitations.module';
+import { WorkspaceModule } from './workspace/workspace.module';
+import { ConfigModule } from '@nestjs/config';
+import { HealthController } from './health/health.controller';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env'  }),
     PrismaModule,
     AuthModule,
     FeaturesModule,
@@ -23,9 +27,10 @@ import { InvitationsModule } from './invitations/invitations.module';
     BugReportsModule,
     ReleasesModule,
     CommentsModule,
-    InvitationsModule
+    InvitationsModule,
+    WorkspaceModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, HealthController],
   providers: [AppService],
 })
 export class AppModule {}

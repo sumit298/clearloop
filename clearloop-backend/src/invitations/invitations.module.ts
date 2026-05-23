@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { InvitationsController } from './invitations.controller';
 import { InvitationsService } from './invitations.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { EmailModule } from '../email/email.module';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { PrismaModule } from '../prisma/prisma.module';
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '7d' },
     }),
+    EmailModule
   ],
   controllers: [InvitationsController],
   providers: [InvitationsService],
