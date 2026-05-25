@@ -29,8 +29,14 @@ export class AuthController {
     return this.authService.register(dto);
   }
 
+  @Post('login')
+  login(@Body() dto: LoginDto) {
+    return this.authService.loginByEmail(dto);
+  }
+
+  // Legacy endpoint - keep for backward compatibility
   @Post('login/:slug')
-  login(@Param('slug') slug: string, @Body() dto: LoginDto) {
+  loginBySlug(@Param('slug') slug: string, @Body() dto: LoginDto) {
     return this.authService.login(dto, slug);
   }
 

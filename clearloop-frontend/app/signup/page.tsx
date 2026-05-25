@@ -4,14 +4,14 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Logo } from '@/components/landing/Logo';
-import { api } from '@/lib/api/client';
-import { auth } from '@/lib/auth';
+import { authApi } from '@/lib/api/auth';
+import { useAuth } from '@/lib/contexts/AuthContext';
 
 export default function SignUp() {
   const router = useRouter();
+  const { login: authLogin } = useAuth();
   const [formData, setFormData] = useState({
     companyName: '',
-    slug: '',
     name: '',
     email: '',
     password: '',
@@ -22,12 +22,6 @@ export default function SignUp() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    
-    // Auto-generate slug from company name
-    if (name === 'companyName') {
-      const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-      setFormData(prev => ({ ...prev, slug }));
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,11 +30,11 @@ export default function SignUp() {
     setLoading(true);
 
     try {
-      const response = await api.register(formData);
-      auth.setAuth(response);
+      const response = await authApi.register(formData);
+      await authLogin(response.access_token);
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Failed to create account');
+      setError(err.response?.data?.message || err.message || 'Failed to create account');
     } finally {
       setLoading(false);
     }
@@ -92,29 +86,6 @@ export default function SignUp() {
                   required
                   className="mt-2 w-full rounded-lg border border-border bg-surface px-3.5 py-2.5 text-[14px] text-foreground placeholder:text-text-muted focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
                 />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="slug"
-                  className="block text-[13px] font-medium text-foreground"
-                >
-                  Company slug
-                </label>
-                <input
-                  id="slug"
-                  name="slug"
-                  type="text"
-                  placeholder="acme-inc"
-                  value={formData.slug}
-                  onChange={handleChange}
-                  required
-                  pattern="[a-z0-9-]{3,50}"
-                  className="mt-2 w-full rounded-lg border border-border bg-surface px-3.5 py-2.5 text-[14px] text-foreground placeholder:text-text-muted focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
-                />
-                <p className="mt-1.5 text-[12px] text-text-muted">
-                  Used in your login URL: clearloop.com/{formData.slug || 'your-slug'}
-                </p>
               </div>
 
               <div>

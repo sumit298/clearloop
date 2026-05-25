@@ -1,60 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { auth } from "@/lib/auth";
-import { api } from "@/lib/api/client";
-import type { Project } from "@/types";
+import { useState } from 'react';
+import { useProjects, useCreateProject, useDeleteProject } from '@/lib/hooks/useProjects';
 import Link from "next/link";
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: projects, isLoading } = useProjects();
+  const createProject = useCreateProject();
+  const deleteProject = useDeleteProject();
+  
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
     githubRepoUrl: "",
   });
-  const [creating, setCreating] = useState(false);
-
-  useEffect(() => {
-    loadProjects();
-  }, []);
-
-  const loadProjects = async () => {
-    try {
-      const token = auth.getToken();
-      if (!token) return;
-
-      const data = await api.getProjects(token);
-      setProjects(data);
-    } catch (error) {
-      console.error("Failed to load projects:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    setCreating(true);
 
     try {
-      const token = auth.getToken();
-      if (!token) return;
-
-      await api.createProject(token, formData);
+      await createProject.mutateAsync(formData);
       setShowCreateModal(false);
       setFormData({ name: "", description: "", githubRepoUrl: "" });
-      loadProjects();
     } catch (error) {
       console.error("Failed to create project:", error);
-    } finally {
-      setCreating(false);
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-text-muted">Loading...</div>
@@ -79,7 +53,7 @@ export default function ProjectsPage() {
         </button>
       </div>
 
-      {projects.length === 0 ? (
+      {!projects || projects.length === 0 ? (
         <div className="rounded-xl border border-border bg-surface p-12 text-center">
           <p className="text-text-muted">No projects yet</p>
           <button
@@ -107,7 +81,7 @@ export default function ProjectsPage() {
                 <div className="mt-4 flex items-center gap-2 text-[12px] text-text-muted">
                   <span>⚡</span>
                   <span className="truncate">
-                    {project.githubRepoUrl.replace("https://github.com", "")}
+                    {project.githubRepoUrl.replace("https://github.com/", "")}
                   </span>
                 </div>
               )}
@@ -173,10 +147,10 @@ export default function ProjectsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={creating}
+                  disabled={createProject.isPending}
                   className="flex-1 rounded-lg bg-primary px-4 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-primary-hover disabled:opacity-50"
                 >
-                  {creating ? "Creating..." : "Create"}
+                  {createProject.isPending ? "Creating..." : "Create"}
                 </button>
               </div>
             </form>
