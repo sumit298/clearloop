@@ -12,12 +12,14 @@ import { ReleasesModule } from './releases/releases.module';
 import { CommentsModule } from './comments/comments.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { WorkspaceModule } from './workspace/workspace.module';
+import { LoggerModule } from './logger/logger.module';
 import { ConfigModule } from '@nestjs/config';
 import { HealthController } from './health/health.controller';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env'  }),
+    LoggerModule,
     PrismaModule,
     AuthModule,
     FeaturesModule,

@@ -3,9 +3,15 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import * as bodyParser from 'body-parser';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+  });
+
+  // Use Winston logger
+  app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
 
   app.enableCors({
     origin: [
@@ -37,7 +43,11 @@ async function bootstrap() {
     }),
   );
 
-  await app.listen(process.env.PORT ?? 3000);
+  const port = process.env.PORT ?? 8000;
+  await app.listen(port);
+  
+  const logger = app.get(WINSTON_MODULE_NEST_PROVIDER);
+  logger.log(`🚀 Application is running on: http://localhost:${port}`, 'Bootstrap');
 }
 bootstrap();
 

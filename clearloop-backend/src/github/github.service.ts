@@ -2,13 +2,139 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Inject,
 } from '@nestjs/common';
+import type { LoggerService } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GitHubWebhookDto } from './dto/github-webhook.dto';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
 @Injectable()
 export class GithubService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(WINSTON_MODULE_NEST_PROVIDER)
+    private readonly logger: LoggerService,
+  ) {}
+
+  /**
+   * Save GitHub App installation
+   */
+  async saveInstallation(tenantId: string, installationId: string) {
+    // Store installation_id in tenant's projects
+    // This will be updated when installation_repositories event fires
+    this.logger.log(
+      `Installation ${installationId} saved for tenant ${tenantId}`,
+      'GithubService',
+    );
+    return { message: 'Installation saved', installationId };
+  }
+
+  /**
+   * Get GitHub installation status
+   */
+  async getInstallation(tenantId: string) {
+    const projects = await this.prisma.project.findMany({
+      where: {
+        tenantId,
+        githubInstallationId: { not: null },
+      },
+      select: {
+        id: true,
+        name: true,
+        githubRepoUrl: true,
+        githubInstallationId: true,
+      },
+    });
+
+    return {
+      connected: projects.length > 0,
+      installationId: projects[0]?.githubInstallationId || null,
+      projects,
+    };
+  }
+
+  /**
+   * Disconnect GitHub App
+   */
+  async disconnectInstallation(tenantId: string) {
+    await this.prisma.project.updateMany({
+      where: { tenantId },
+      data: {
+        githubInstallationId: null,
+        githubRepoId: null,
+      },
+    });
+
+    return { message: 'GitHub App disconnected successfully' };
+  }
+
+  /**
+   * Handle GitHub App installation events
+   */
+  async handleInstallationEvent(payload: any) {
+    const { action, installation, repositories } = payload;
+    const installationId = installation.id.toString();
+
+    this.logger.log(
+      `Installation event: ${action}, installation_id: ${installationId}`,
+      'GithubService',
+    );
+
+    if (action === 'created' || action === 'added') {
+      // Store installation_id and repo mappings
+      const repos = repositories || installation.repositories || [];
+
+      for (const repo of repos) {
+        const repoId = repo.id.toString();
+        const repoUrl = repo.html_url;
+
+        this.logger.log(`Processing repo: ${repoUrl}`, 'GithubService');
+
+        // Find project by githubRepoUrl
+        const project = await this.prisma.project.findFirst({
+          where: { githubRepoUrl: repoUrl },
+        });
+
+        if (project) {
+          // Update existing project with installation_id and repo_id
+          await this.prisma.project.update({
+            where: { id: project.id },
+            data: {
+              githubInstallationId: installationId,
+              githubRepoId: repoId,
+            },
+          });
+          this.logger.log(
+            `Updated project ${project.name} with installation`,
+            'GithubService',
+          );
+        } else {
+          this.logger.warn(
+            `No project found for repo: ${repoUrl}`,
+            'GithubService',
+          );
+        }
+      }
+
+      return { message: 'Installation processed successfully' };
+    }
+
+    if (action === 'deleted') {
+      // Remove installation_id from all projects
+      await this.prisma.project.updateMany({
+        where: { githubInstallationId: installationId },
+        data: {
+          githubInstallationId: null,
+          githubRepoId: null,
+        },
+      });
+
+      return { message: 'Installation removed successfully' };
+    }
+
+    return { message: `Installation event ${action} processed` };
+  }
 
   async handleWebhook(payload: GitHubWebhookDto) {
     const { action, pull_request, repository } = payload;
@@ -23,7 +149,10 @@ export class GithubService {
     });
 
     if (!project) {
-      console.log(`No Project found for repo: ${repository.full_name}`);
+      this.logger.warn(
+        `No Project found for repo: ${repository.full_name}`,
+        'GithubService',
+      );
       return { message: 'Repository not linked to any project' };
     }
 
@@ -32,6 +161,11 @@ export class GithubService {
     const featureId = this.extractFeatureId(
       pull_request.head.ref,
       pull_request.body,
+    );
+
+    this.logger.log(
+      `Webhook: ${action} PR #${pull_request.number} in ${repository.full_name}`,
+      'GithubService',
     );
 
     switch (action) {
