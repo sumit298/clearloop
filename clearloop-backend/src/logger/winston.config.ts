@@ -5,8 +5,8 @@ import { format } from 'winston';
 const { combine, timestamp, printf, colorize, errors } = format;
 
 // Custom log format
-const logFormat = printf(({ level, message, timestamp, context, trace }) => {
-  return `${timestamp} [${context || 'Application'}] ${level}: ${message}${trace ? `\n${trace}` : ''}`;
+const logFormat = printf(({ level, message, timestamp, context, stack }) => {
+  return `${timestamp} [${context || 'Application'}] ${level}: ${message}${stack ? `\n${stack}` : ''}`;
 });
 
 export const winstonConfig = {

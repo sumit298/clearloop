@@ -38,12 +38,14 @@ export class GithubController {
       throw new BadRequestException('GitHub App not configured');
     }
     
-    // Store tenantId in state for callback
+    // Create signed state with timestamp
     const state = Buffer.from(
-      JSON.stringify({ tenantId: req.tenantId }),
-    ).toString('base64');
+      JSON.stringify({ 
+        tenantId: req.tenantId,
+        timestamp: Date.now()
+      }),
+    ).toString('base64url');
     
-    // Use GitHub OAuth flow for app installation
     const installUrl = `https://github.com/apps/${process.env.GITHUB_APP_NAME}/installations/new`;
     
     return {
@@ -64,12 +66,17 @@ export class GithubController {
   ) {
     try {
       // Decode state to get tenantId
-      const { tenantId } = JSON.parse(
-        Buffer.from(state, 'base64').toString(),
+      const decoded = JSON.parse(
+        Buffer.from(state, 'base64url').toString(),
       );
       
+      // Validate timestamp (within 10 minutes)
+      if (Date.now() - decoded.timestamp > 600000) {
+        throw new BadRequestException('State expired');
+      }
+      
       // Store installation_id
-      await this.githubService.saveInstallation(tenantId, installationId);
+      await this.githubService.saveInstallation(decoded.tenantId, installationId);
       
       // Redirect back to settings page
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';

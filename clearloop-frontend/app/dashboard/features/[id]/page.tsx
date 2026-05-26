@@ -271,7 +271,7 @@ export default function FeatureDetailPage() {
                           {log.action.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
                         </p>
                         <p className="mt-1 text-[12px] text-text-dim">
-                          by {log.user.name}
+                          by {log.user?.name ?? 'Unknown user'}
                         </p>
                         <p className="mt-1 text-[11px] text-text-dim">
                           {formatDate(log.createdAt)}
@@ -301,12 +301,12 @@ export default function FeatureDetailPage() {
                   <div key={comment.id} className="rounded-lg border border-border bg-background p-3">
                     <div className="flex items-start gap-3">
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20 text-[12px] font-medium text-primary-soft">
-                        {comment.user.name.charAt(0).toUpperCase()}
+                        {(comment.user?.name?.charAt(0) ?? '?').toUpperCase()}
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <span className="text-[13px] font-medium text-foreground">
-                            {comment.user.name}
+                            {comment.user?.name ?? 'Unknown user'}
                           </span>
                           <span className="text-[11px] text-text-dim">
                             {formatDate(comment.createdAt)}
