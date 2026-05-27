@@ -1,17 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useAuth } from '@/lib/contexts/AuthContext';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { auth } from '@/lib/auth';
 import { Logo } from '@/components/landing/Logo';
 
 const navigation = [
   { name: 'Overview', href: '/dashboard', icon: '◆' },
   { name: 'Projects', href: '/dashboard/projects', icon: '▣' },
   { name: 'Features', href: '/dashboard/features', icon: '◉' },
-  { name: 'Releases', href: '/dashboard/releases', icon: '▲' },
   { name: 'Bugs', href: '/dashboard/bugs', icon: '◈' },
+  { name: 'Pull Requests', href: '/dashboard/pull-requests', icon: '⚡' },
+  { name: 'Releases', href: '/dashboard/releases', icon: '▲' },
   { name: 'Team', href: '/dashboard/team', icon: '◎' },
   { name: 'Settings', href: '/dashboard/settings', icon: '◐' },
 ];
@@ -23,29 +24,15 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<any>(null);
-  const [tenant, setTenant] = useState<any>(null);
-
-  useEffect(() => {
-    if (!auth.isAuthenticated()) {
-      router.push('/signin');
-      return;
-    }
-
-    setUser(auth.getUser());
-    setTenant(auth.getTenant());
-  }, [router]);
+  const { user, workspace, logout } = useAuth();
 
   const handleLogout = () => {
-    auth.clearAuth();
+    logout();
     router.push('/');
   };
 
-  if (!user) {
-    return null;
-  }
-
   return (
+    <ProtectedRoute>
     <div className="flex h-screen bg-background text-foreground">
       <aside className="flex w-64 flex-col border-r border-border bg-surface">
         <div className="flex h-16 items-center border-b border-border px-6">
@@ -53,8 +40,8 @@ export default function DashboardLayout({
         </div>
 
         <div className="border-b border-border px-6 py-4">
-          <div className="text-[13px] font-medium text-foreground">{tenant?.name}</div>
-          <div className="mt-0.5 text-[11px] text-text-muted">{tenant?.slug}</div>
+          <div className="text-[13px] font-medium text-foreground">{workspace?.name}</div>
+          <div className="mt-0.5 text-[11px] text-text-muted">{workspace?.slug}</div>
         </div>
 
         <nav className="flex-1 space-y-1 p-4">
@@ -80,11 +67,11 @@ export default function DashboardLayout({
         <div className="border-t border-border p-4">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20 text-[13px] font-medium text-primary-soft">
-              {user.name.charAt(0).toUpperCase()}
+              {user?.name?.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="truncate text-[13px] font-medium text-foreground">{user.name}</div>
-              <div className="truncate text-[11px] text-text-muted">{user.role}</div>
+              <div className="truncate text-[13px] font-medium text-foreground">{user?.name}</div>
+              <div className="truncate text-[11px] text-text-muted">{user?.role}</div>
             </div>
           </div>
           <button
@@ -100,5 +87,6 @@ export default function DashboardLayout({
         {children}
       </main>
     </div>
+    </ProtectedRoute>
   );
 }

@@ -1,36 +1,42 @@
 "use client";
 
 import { useState } from 'react';
-import { useFeatures, useCreateFeature } from '@/lib/hooks/useFeatures';
-import { useProjects } from '@/lib/hooks/useProjects';
-import { useUsers } from '@/lib/hooks/useUsers';
+import { useBugs, useCreateBug } from '@/lib/hooks/useBugs';
+import { useFeatures } from '@/lib/hooks/useFeatures';
 import Link from 'next/link';
 
-export default function FeaturesPage() {
-  const { data: features, isLoading } = useFeatures();
-  const { data: projects } = useProjects();
-  const { data: users } = useUsers();
-  const createFeature = useCreateFeature();
+export default function BugsPage() {
+  const { data: bugs, isLoading } = useBugs();
+  const { data: features } = useFeatures();
+  const createBug = useCreateBug();
   
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
-    reason: "",
-    projectId: "",
-    assignedToId: "",
-    priority: "MEDIUM",
+    severity: "MEDIUM",
+    source: "",
+    featureId: "",
   });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
-      await createFeature.mutateAsync(formData);
+      const { source, ...bugData } = formData;
+      // Add source to description for now (we can enhance backend later to store source separately)
+      const descriptionWithSource = `**Source:** ${source}\n\n${bugData.description}`;
+      
+      await createBug.mutateAsync({
+        ...bugData,
+        description: descriptionWithSource,
+        featureId: bugData.featureId || undefined,
+      });
+      
       setShowCreateModal(false);
-      setFormData({ title: "", description: "", reason: "", projectId: "", assignedToId: "", priority: "MEDIUM" });
+      setFormData({ title: "", description: "", severity: "MEDIUM", source: "", featureId: "" });
     } catch (error) {
-      console.error("Failed to create feature:", error);
+      console.error("Failed to create bug:", error);
     }
   };
 
@@ -46,84 +52,76 @@ export default function FeaturesPage() {
     <div className="p-8">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Features</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">Bugs</h1>
           <p className="mt-2 text-[15px] text-text-dim">
-            Track feature development and progress
+            Track bugs from any source to resolution
           </p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
           className="rounded-lg bg-primary px-4 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-primary-hover"
         >
-          New Feature
+          Report Bug
         </button>
       </div>
 
-      {!features || features.length === 0 ? (
+      {!bugs || bugs.length === 0 ? (
         <div className="rounded-xl border border-border bg-surface p-12 text-center">
-          <p className="text-text-muted">No features yet</p>
+          <p className="text-text-muted">No bugs reported yet</p>
           <button
             onClick={() => setShowCreateModal(true)}
             className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-primary-hover"
           >
-            Create your first feature
+            Report your first bug
           </button>
         </div>
       ) : (
         <div className="space-y-3">
-          {features.map((feature) => (
+          {bugs.map((bug) => (
             <Link
-              key={feature.id}
-              href={`/dashboard/features/${feature.id}`}
+              key={bug.id}
+              href={`/dashboard/bugs/${bug.id}`}
               className="block rounded-lg border border-border bg-surface p-4 transition-colors hover:bg-surface-2"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-medium text-foreground">{feature.title}</h3>
-                  {feature.description && (
+                  <h3 className="font-medium text-foreground">{bug.title}</h3>
+                  {bug.description && (
                     <p className="mt-1 text-[13px] text-text-muted line-clamp-2">
-                      {feature.description}
+                      {bug.description}
                     </p>
                   )}
-                  {feature.reason && (
-                    <div className="mt-2 flex items-start gap-2">
-                      <span className="text-[12px] font-medium text-text-dim">Why:</span>
-                      <p className="text-[12px] text-text-muted line-clamp-1">
-                        {feature.reason}
-                      </p>
-                    </div>
-                  )}
                   <div className="mt-2 flex items-center gap-3 text-[12px] text-text-dim">
-                    {feature.assignedTo && (
-                      <span>Assigned to: {feature.assignedTo.name}</span>
+                    {bug.feature && (
+                      <span>Feature: {bug.feature.title}</span>
                     )}
-                    {feature.project && (
-                      <span>Project: {feature.project.name}</span>
+                    {bug.reportedBy && (
+                      <span>Reported by: {bug.reportedBy.name}</span>
                     )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <span
                     className={`rounded-full px-2 py-1 text-[11px] font-medium ${
-                      feature.status === 'DONE'
+                      bug.status === 'RESOLVED'
                         ? 'bg-success/10 text-success'
-                        : feature.status === 'IN_PROGRESS'
+                        : bug.status === 'IN_PROGRESS'
                         ? 'bg-primary/10 text-primary-soft'
                         : 'bg-surface-2 text-text-muted'
                     }`}
                   >
-                    {feature.status.replace('_', ' ')}
+                    {bug.status.replace('_', ' ')}
                   </span>
                   <span
                     className={`rounded-full px-2 py-1 text-[11px] font-medium ${
-                      feature.priority === 'CRITICAL'
+                      bug.severity === 'CRITICAL'
                         ? 'bg-danger/10 text-danger'
-                        : feature.priority === 'HIGH'
+                        : bug.severity === 'HIGH'
                         ? 'bg-warning/10 text-warning'
                         : 'bg-surface-2 text-text-muted'
                     }`}
                   >
-                    {feature.priority}
+                    {bug.severity}
                   </span>
                 </div>
               </div>
@@ -136,8 +134,8 @@ export default function FeaturesPage() {
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-lg rounded-xl border border-border bg-surface p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-semibold">Create Feature</h2>
-            <p className="mt-1 text-[13px] text-text-muted">Track a new feature from client request to release</p>
+            <h2 className="text-xl font-semibold">Report Bug</h2>
+            <p className="mt-1 text-[13px] text-text-muted">Track bugs from any source - Excel, email, client calls, QA testing</p>
             
             <form onSubmit={handleCreate} className="mt-6 space-y-5">
               {/* Title */}
@@ -149,7 +147,7 @@ export default function FeaturesPage() {
                   type="text"
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  placeholder="e.g., Add dark mode support"
+                  placeholder="e.g., Login button not working on mobile"
                   required
                   className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground placeholder:text-text-dim focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
                 />
@@ -158,82 +156,43 @@ export default function FeaturesPage() {
               {/* Description */}
               <div>
                 <label className="block text-[13px] font-medium text-foreground">
-                  Description
+                  Description <span className="text-danger">*</span>
                 </label>
-                <p className="mt-1 text-[12px] text-text-dim">Full requirement details</p>
+                <p className="mt-1 text-[12px] text-text-dim">Full bug details, steps to reproduce, expected vs actual behavior</p>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Describe the feature requirements..."
-                  rows={3}
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground placeholder:text-text-dim focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
-                />
-              </div>
-
-              {/* Reason (WHY) */}
-              <div>
-                <label className="block text-[13px] font-medium text-foreground">
-                  Reason (Why) <span className="text-danger">*</span>
-                </label>
-                <p className="mt-1 text-[12px] text-text-dim">Why is this feature being built? (Client request, business need, etc.)</p>
-                <textarea
-                  value={formData.reason}
-                  onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                  placeholder="e.g., Client requested for better user experience in low-light environments"
-                  rows={2}
+                  placeholder="Describe the bug in detail..."
+                  rows={4}
                   required
                   className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground placeholder:text-text-dim focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
                 />
               </div>
 
-              {/* Project */}
+              {/* Source */}
               <div>
                 <label className="block text-[13px] font-medium text-foreground">
-                  Project <span className="text-danger">*</span>
+                  Source <span className="text-danger">*</span>
                 </label>
-                <select
-                  value={formData.projectId}
-                  onChange={(e) => setFormData({ ...formData, projectId: e.target.value })}
+                <p className="mt-1 text-[12px] text-text-dim">Where did this bug come from?</p>
+                <input
+                  type="text"
+                  value={formData.source}
+                  onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+                  placeholder="e.g., Client email, Excel sheet, QA testing, Production monitoring"
                   required
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
-                >
-                  <option value="">Select project</option>
-                  {projects?.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
+                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground placeholder:text-text-dim focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
+                />
               </div>
 
-              {/* Assign To */}
+              {/* Severity */}
               <div>
                 <label className="block text-[13px] font-medium text-foreground">
-                  Assign To
-                </label>
-                <p className="mt-1 text-[12px] text-text-dim">Select a developer to work on this feature</p>
-                <select
-                  value={formData.assignedToId}
-                  onChange={(e) => setFormData({ ...formData, assignedToId: e.target.value })}
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
-                >
-                  <option value="">Unassigned</option>
-                  {users?.filter(u => u.isActive).map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.name} ({user.role})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Priority */}
-              <div>
-                <label className="block text-[13px] font-medium text-foreground">
-                  Priority <span className="text-danger">*</span>
+                  Severity <span className="text-danger">*</span>
                 </label>
                 <select
-                  value={formData.priority}
-                  onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                  value={formData.severity}
+                  onChange={(e) => setFormData({ ...formData, severity: e.target.value })}
                   required
                   className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
                 >
@@ -241,6 +200,26 @@ export default function FeaturesPage() {
                   <option value="MEDIUM">Medium</option>
                   <option value="HIGH">High</option>
                   <option value="CRITICAL">Critical</option>
+                </select>
+              </div>
+
+              {/* Link to Feature (Optional) */}
+              <div>
+                <label className="block text-[13px] font-medium text-foreground">
+                  Link to Feature (Optional)
+                </label>
+                <p className="mt-1 text-[12px] text-text-dim">If this bug is related to an existing feature, link it for traceability</p>
+                <select
+                  value={formData.featureId}
+                  onChange={(e) => setFormData({ ...formData, featureId: e.target.value })}
+                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
+                >
+                  <option value="">No feature linked</option>
+                  {features?.map((feature) => (
+                    <option key={feature.id} value={feature.id}>
+                      {feature.title}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -255,10 +234,10 @@ export default function FeaturesPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={createFeature.isPending}
+                  disabled={createBug.isPending}
                   className="flex-1 rounded-lg bg-primary px-4 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-primary-hover disabled:opacity-50"
                 >
-                  {createFeature.isPending ? "Creating..." : "Create Feature"}
+                  {createBug.isPending ? "Reporting..." : "Report Bug"}
                 </button>
               </div>
             </form>

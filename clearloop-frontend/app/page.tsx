@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Nav } from "@/components/landing/Nav";
 import { HeroTimeline } from "@/components/landing/HeroTimeline";
 import { ContextTimeline } from "@/components/landing/ContextTimeLine";
@@ -30,13 +31,13 @@ export default function Home() {
           </p>
 
           <div className="mt-9 flex flex-wrap items-center gap-3">
-            <a
-              href="#start"
+            <Link
+              href="/signup"
               className="inline-flex items-center gap-2 rounded-md border border-primary-soft/30 bg-primary px-4 py-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-primary-hover"
             >
               Start free
               <span className="text-primary-soft">→</span>
-            </a>
+            </Link>
             <a
               href="#demo"
               className="inline-flex items-center gap-2 rounded-md border border-border-strong bg-surface px-4 py-2.5 text-[13px] font-medium text-text-dim transition-colors hover:border-primary-soft/30 hover:text-foreground"
@@ -115,13 +116,13 @@ export default function Home() {
             ninety days of activity into a working timeline.
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-            <a
-              href="#"
+            <Link
+              href="/signup"
               className="inline-flex items-center gap-2 rounded-md border border-primary-soft/30 bg-primary px-5 py-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-primary-hover"
             >
               Start free
               <span className="text-primary-soft">→</span>
-            </a>
+            </Link>
             <a
               href="#"
               className="inline-flex items-center gap-2 rounded-md border border-border-strong bg-surface px-5 py-2.5 text-[13px] font-medium text-text-dim transition-colors hover:border-primary-soft/30 hover:text-foreground"

@@ -17,17 +17,36 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    const existing = await this.prisma.tenant.findUnique({
-      where: { slug: dto.slug },
-    });
-    if (existing) throw new ConflictException('Slug already taken');
+    // Auto-generate slug from company name + random suffix
+    const baseSlug = dto.companyName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .substring(0, 30);
+    
+    const randomSuffix = Math.random().toString(36).substring(2, 8);
+    const slug = `${baseSlug}-${randomSuffix}`;
 
+    const existing = await this.prisma.tenant.findUnique({
+      where: { slug },
+    });
+    if (existing) {
+      // Extremely rare collision, try again with different suffix
+      const newSuffix = Math.random().toString(36).substring(2, 8);
+      const newSlug = `${baseSlug}-${newSuffix}`;
+      return this.createWorkspace(dto, newSlug);
+    }
+
+    return this.createWorkspace(dto, slug);
+  }
+
+  private async createWorkspace(dto: RegisterDto, slug: string) {
     const hashed = await bcrypt.hash(dto.password, 10);
 
     const tenant = await this.prisma.tenant.create({
       data: {
         name: dto.companyName,
-        slug: dto.slug,
+        slug,
         users: {
           create: {
             email: dto.email,
@@ -43,6 +62,44 @@ export class AuthService {
     const user = tenant.users[0];
     if (!user) throw new InternalServerErrorException('User creation failed');
     return this.signToken(user.id, tenant.id, user.role);
+  }
+
+  async loginByEmail(dto: LoginDto) {
+    // Find all workspaces user belongs to
+    const users = await this.prisma.user.findMany({
+      where: { email: dto.email },
+      include: { tenant: true },
+    });
+
+    if (users.length === 0) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Verify password with first user (all should have same password)
+    const user = users[0];
+    if (!user || !user.password) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const valid = await bcrypt.compare(dto.password, user.password);
+    if (!valid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // If multiple workspaces, return list for selection
+    if (users.length > 1) {
+      return {
+        requiresWorkspaceSelection: true,
+        workspaces: users.map((u) => ({
+          id: u.tenant.id,
+          name: u.tenant.name,
+          slug: u.tenant.slug,
+        })),
+      };
+    }
+
+    // Single workspace - login directly
+    return this.signToken(user.id, user.tenantId, user.role);
   }
 
   async login(dto: LoginDto, slug: string) {

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Logo } from "./Logo";
 
 const nav = [
@@ -27,19 +28,19 @@ export function Nav() {
           </nav>
         </div>
         <div className="flex items-center gap-2">
-          <a
-            href="#login"
+          <Link
+            href="/signin"
             className="hidden rounded-md px-3 py-1.5 text-[13px] text-text-dim transition-colors hover:text-foreground sm:inline-flex"
           >
             Sign in
-          </a>
-          <a
-            href="#start"
+          </Link>
+          <Link
+            href="/signup"
             className="inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-surface-2 px-3 py-1.5 text-[13px] font-medium text-foreground transition-colors hover:border-primary-soft/40 hover:bg-surface"
           >
             Start free
             <span className="text-text-muted">→</span>
-          </a>
+          </Link>
         </div>
       </div>
     </header>

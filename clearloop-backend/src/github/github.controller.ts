@@ -10,6 +10,8 @@ import {
   Req,
   Headers,
   BadRequestException,
+  Res,
+  Delete,
 } from '@nestjs/common';
 import { GithubService } from './github.service';
 import type { GitHubWebhookDto } from './dto/github-webhook.dto';
@@ -22,13 +24,100 @@ import * as crypto from 'crypto';
 @Controller('github')
 export class GithubController {
   constructor(private readonly githubService: GithubService) {}
+
+  /**
+   * Get GitHub App installation URL
+   * Returns the URL for the frontend to redirect to
+   */
+  @Get('install-url')
+  @UseGuards(JwtAuthGuard, TenantGuard)
+  async getInstallUrl(@Request() req: AuthenticatedRequest) {
+    const clientId = process.env.GITHUB_APP_CLIENT_ID;
+    
+    if (!clientId) {
+      throw new BadRequestException('GitHub App not configured');
+    }
+    
+    // Create signed state with timestamp
+    const state = Buffer.from(
+      JSON.stringify({ 
+        tenantId: req.tenantId,
+        timestamp: Date.now()
+      }),
+    ).toString('base64url');
+    
+    const installUrl = `https://github.com/apps/${process.env.GITHUB_APP_NAME}/installations/new`;
+    
+    return {
+      url: `${installUrl}?state=${state}`,
+    };
+  }
+
+  /**
+   * GitHub App installation callback
+   * Called after user installs the app
+   */
+  @Get('install/callback')
+  async installationCallback(
+    @Query('installation_id') installationId: string,
+    @Query('setup_action') setupAction: string,
+    @Query('state') state: string,
+    @Res() res,
+  ) {
+    try {
+      // Decode state to get tenantId
+      const decoded = JSON.parse(
+        Buffer.from(state, 'base64url').toString(),
+      );
+      
+      // Validate state shape
+      if (typeof decoded.tenantId !== 'string' || typeof decoded.timestamp !== 'number') {
+        throw new BadRequestException('Invalid state');
+      }
+      
+      // Validate timestamp (within 10 minutes)
+      if (Date.now() - decoded.timestamp > 600000) {
+        throw new BadRequestException('State expired');
+      }
+      
+      // Store installation_id
+      await this.githubService.saveInstallation(decoded.tenantId, installationId);
+      
+      // Redirect back to settings page
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      res.redirect(`${frontendUrl}/dashboard/settings?github=connected`);
+    } catch (error) {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      res.redirect(`${frontendUrl}/dashboard/settings?github=error`);
+    }
+  }
+
+  /**
+   * Get GitHub installation status
+   */
+  @Get('installation')
+  @UseGuards(JwtAuthGuard, TenantGuard)
+  async getInstallation(@Request() req: AuthenticatedRequest) {
+    return this.githubService.getInstallation(req.tenantId);
+  }
+
+  /**
+   * Disconnect GitHub App
+   */
+  @Delete('installation')
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
+  @Roles('ADMIN')
+  async disconnectInstallation(@Request() req: AuthenticatedRequest) {
+    return this.githubService.disconnectInstallation(req.tenantId);
+  }
+
   /**
    * GitHub webhook endpoint (no auth - verified by signature)
    */
   @Post('webhook')
   async handleWebHook(
-    @Req() req: Request & { rawBody?: Buffer},
-    @Body() payload: GitHubWebhookDto,
+    @Req() req: Request & { rawBody?: Buffer },
+    @Body() payload: any,
     @Headers('x-hub-signature-256') signature: string,
     @Headers('x-github-event') event: string,
   ) {
@@ -36,9 +125,16 @@ export class GithubController {
       this.verifyWebhookSignature(req.rawBody, signature);
     }
 
+    // Handle installation events
+    if (event === 'installation' || event === 'installation_repositories') {
+      return this.githubService.handleInstallationEvent(payload);
+    }
+
+    // Handle PR events
     if (event !== 'pull_request') {
       return { message: `Event ${event} ignored` };
     }
+    
     return this.githubService.handleWebhook(payload);
   }
 

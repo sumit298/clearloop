@@ -7,13 +7,6 @@ export class RegisterDto {
 
   @IsString()
   @IsNotEmpty()
-  @Matches(/^[a-z0-9-]{3,50}$/, {
-    message: 'Slug must be 3-50 characters, lowercase letters, numbers, and dashes only',
-  })
-  slug!: string;
-
-  @IsString()
-  @IsNotEmpty()
   name!: string;
 
   @IsEmail()
