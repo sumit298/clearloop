@@ -31,6 +31,7 @@ export default function BugsPage() {
         ...bugData,
         description: descriptionWithSource,
         featureId: bugData.featureId || undefined,
+        severity: bugData.severity as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
       });
       
       setShowCreateModal(false);
