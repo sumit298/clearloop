@@ -19,10 +19,13 @@ export default function AuthCallback() {
     }
 
     if (token) {
-      login(token);
-      router.push("/dashboard");
+      login(token)
+        .then(() => router.push("/dashboard"))
+        .catch((err) => {
+          router.push(`/signin?error=${encodeURIComponent(err.message || "Login failed")}`);
+        });
     } else {
-      router.push("/signin?error=No token received");
+      router.push(`/signin?error=${encodeURIComponent("No token received")}`);
     }
   }, [searchParams, login, router]);
 

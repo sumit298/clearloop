@@ -66,7 +66,7 @@ export class AuthController {
         `${frontendUrl}/auth/callback?token=${result.access_token}`,
       );
     } catch (error) {
-      const frontendUrl = this.configService.get('FRONTEND_URL')!;
+      const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
       res.redirect(
         `${frontendUrl}/auth/callback?error=${encodeURIComponent(error instanceof Error ? error.message : 'Authentication failed')}`,
       );
@@ -99,7 +99,7 @@ export class AuthController {
         `${frontendUrl}/auth/callback?token=${result.access_token}`,
       );
     } catch (error) {
-      const frontendUrl = this.configService.get('FRONTEND_URL')!;
+      const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
       res.redirect(
         `${frontendUrl}/auth/callback?error=${encodeURIComponent(error instanceof Error ? error.message : 'Authentication failed')}`,
       );

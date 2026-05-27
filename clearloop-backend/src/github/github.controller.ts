@@ -70,6 +70,11 @@ export class GithubController {
         Buffer.from(state, 'base64url').toString(),
       );
       
+      // Validate state shape
+      if (typeof decoded.tenantId !== 'string' || typeof decoded.timestamp !== 'number') {
+        throw new BadRequestException('Invalid state');
+      }
+      
       // Validate timestamp (within 10 minutes)
       if (Date.now() - decoded.timestamp > 600000) {
         throw new BadRequestException('State expired');
