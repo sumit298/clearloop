@@ -1,0 +1,29 @@
+# Documentation files (backed up locally)
+FLOWS.md
+GITHUB_APP_IMPLEMENTATION.md
+GITHUB_APP_PLAN.md
+INPUT_FORMS_COMPLETE.md
+JOURNEYS.md
+OPTION_A_COMPLETE.md
+AGENTS.md
+CLAUDE.md
+README.md
+
+# Backend documentation
+clearloop-backend/API_KEYS_SETUP.md
+clearloop-backend/DEPLOYMENT_CHEATSHEET.md
+clearloop-backend/DEPLOYMENT_GUIDE.md
+clearloop-backend/LOGGER_IMPLEMENTATION.md
+clearloop-backend/TESTING_GUIDE.md
+clearloop-backend/test-api-complete.js
+clearloop-backend/github-app-private-key.pem
+clearloop-backend/*.pem
+
+# Frontend documentation
+clearloop-frontend/AUTH_SETUP.md
+clearloop-frontend/COMPLETE_API_IMPLEMENTATION.md
+clearloop-frontend/LINEAR_AUTH_IMPLEMENTATION.md
+clearloop-frontend/WORKSPACE_API_IMPLEMENTATION.md
+
+# OS
+.DS_Store
