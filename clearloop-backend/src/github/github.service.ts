@@ -103,6 +103,7 @@ export class GithubService {
    * Handle GitHub App installation events
    */
   async handleInstallationEvent(payload: any) {
+    console.log('INSTALLATION PAYLOAD:', JSON.stringify(payload, null, 2));
     const { action, installation, repositories } = payload;
     const installationId = installation.id.toString();
 
@@ -118,6 +119,13 @@ export class GithubService {
       for (const repo of repos) {
         const repoId = repo.id.toString();
         const repoUrl = repo.html_url;
+        if (!repoUrl) {
+          this.logger.warn(
+            `Repository missing html_url: ${JSON.stringify(repo)}`,
+            'GithubService',
+          );
+          continue;
+        }
 
         this.logger.log(`Processing repo: ${repoUrl}`, 'GithubService');
 
@@ -183,7 +191,7 @@ export class GithubService {
         },
       });
 
-      if(projectsWithInstallation.length === 0) {
+      if (projectsWithInstallation.length === 0) {
         this.logger.warn(
           `No projects found with installation ${installationId}`,
           'GithubService',
