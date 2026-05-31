@@ -117,19 +117,21 @@ export class GithubService {
       const updatedTenants = new Set<string>();
 
       for (const repo of repos) {
-        const repoId = repo.id.toString();
-        const repoUrl = repo.html_url;
-        if (!repoUrl) {
+        const repoFullName = repo.full_name;
+
+        if (!repoFullName) {
           this.logger.warn(
-            `Repository missing html_url: ${JSON.stringify(repo)}`,
+            `Repository missing full_name: ${JSON.stringify(repo)}`,
             'GithubService',
           );
           continue;
         }
 
+        const repoId = repo.id.toString();
+        const repoUrl = `https://github.com/${repoFullName}`;
+
         this.logger.log(`Processing repo: ${repoUrl}`, 'GithubService');
 
-        // Find project by repo URL to determine tenant
         const project = await this.prisma.project.findFirst({
           where: { githubRepoUrl: repoUrl },
         });
