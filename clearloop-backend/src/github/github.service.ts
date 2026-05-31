@@ -23,6 +23,12 @@ export class GithubService {
   async saveInstallation(tenantId: string, installationId: string) {
     // Store installation_id in tenant's projects
     // This will be updated when installation_repositories event fires
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        githubInstallationId: installationId,
+      },
+    });
     this.logger.log(
       `Installation ${installationId} saved for tenant ${tenantId}`,
       'GithubService',
@@ -34,6 +40,18 @@ export class GithubService {
    * Get GitHub installation status
    */
   async getInstallation(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { githubInstallationId: true },
+    });
+
+    if (tenant?.githubInstallationId) {
+      return {
+        connected: true,
+        installationId: tenant.githubInstallationId,
+        projects: [],
+      };
+    }
     const projects = await this.prisma.project.findMany({
       where: {
         tenantId,
@@ -58,6 +76,18 @@ export class GithubService {
    * Disconnect GitHub App
    */
   async disconnectInstallation(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { githubInstallationId: true },
+    });
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        githubInstallationId: null,
+      },
+    });
+
     await this.prisma.project.updateMany({
       where: { tenantId },
       data: {
@@ -82,8 +112,8 @@ export class GithubService {
     );
 
     if (action === 'created' || action === 'added') {
-      // Store installation_id and repo mappings
       const repos = repositories || installation.repositories || [];
+      const updatedTenants = new Set<string>();
 
       for (const repo of repos) {
         const repoId = repo.id.toString();
@@ -91,13 +121,13 @@ export class GithubService {
 
         this.logger.log(`Processing repo: ${repoUrl}`, 'GithubService');
 
-        // Find project by githubRepoUrl
+        // Find project by repo URL to determine tenant
         const project = await this.prisma.project.findFirst({
           where: { githubRepoUrl: repoUrl },
         });
 
         if (project) {
-          // Update existing project with installation_id and repo_id
+          // Update project with installation
           await this.prisma.project.update({
             where: { id: project.id },
             data: {
@@ -105,8 +135,17 @@ export class GithubService {
               githubRepoId: repoId,
             },
           });
+
+          // Update only this tenant (multi-tenant safe)
+          await this.prisma.tenant.update({
+            where: { id: project.tenantId },
+            data: { githubInstallationId: installationId },
+          });
+
+          updatedTenants.add(project.tenantId);
+
           this.logger.log(
-            `Updated project ${project.name} with installation`,
+            `Updated project ${project.name} (tenant: ${project.tenantId}) with installation`,
             'GithubService',
           );
         } else {
@@ -117,11 +156,25 @@ export class GithubService {
         }
       }
 
-      return { message: 'Installation processed successfully' };
+      return {
+        message: 'Installation processed successfully',
+        tenantsUpdated: Array.from(updatedTenants),
+      };
     }
 
     if (action === 'deleted') {
-      // Remove installation_id from all projects
+      // Find all projects with this installation
+      const projectsWithInstallation = await this.prisma.project.findMany({
+        where: { githubInstallationId: installationId },
+        select: { id: true, tenantId: true },
+      });
+
+      // Collect affected tenants
+      const affectedTenantIds = new Set(
+        projectsWithInstallation.map((p) => p.tenantId),
+      );
+
+      // Update projects
       await this.prisma.project.updateMany({
         where: { githubInstallationId: installationId },
         data: {
@@ -129,6 +182,27 @@ export class GithubService {
           githubRepoId: null,
         },
       });
+
+      if(projectsWithInstallation.length === 0) {
+        this.logger.warn(
+          `No projects found with installation ${installationId}`,
+          'GithubService',
+        );
+        return { message: 'Installation removed successfully' };
+      }
+
+      // Update only affected tenants (multi-tenant safe)
+      for (const tenantId of affectedTenantIds) {
+        await this.prisma.tenant.update({
+          where: { id: tenantId },
+          data: { githubInstallationId: null },
+        });
+      }
+
+      this.logger.log(
+        `Installation ${installationId} removed from ${affectedTenantIds.size} tenant(s)`,
+        'GithubService',
+      );
 
       return { message: 'Installation removed successfully' };
     }
@@ -243,8 +317,8 @@ export class GithubService {
               featureId,
               userId: feature.createdById,
               action: 'FEATURE_STATUS_UPDATED_BY_PR',
-              metadata: { 
-                status: 'IN_PROGRESS', 
+              metadata: {
+                status: 'IN_PROGRESS',
                 source: 'github_webhook',
                 prId: pullRequest.id,
                 prUrl: pr.html_url,
@@ -315,8 +389,8 @@ export class GithubService {
               featureId: pullRequest.featureId,
               userId: feature.createdById,
               action: 'FEATURE_STATUS_UPDATED_BY_PR',
-              metadata: { 
-                status: 'IN_REVIEW', 
+              metadata: {
+                status: 'IN_REVIEW',
                 source: 'github_webhook',
                 prId: pullRequest.id,
                 prUrl: pr.html_url,
@@ -379,8 +453,8 @@ export class GithubService {
               featureId: pullRequest.featureId,
               userId: feature.createdById,
               action: 'FEATURE_STATUS_UPDATED_BY_PR',
-              metadata: { 
-                status: 'IN_PROGRESS', 
+              metadata: {
+                status: 'IN_PROGRESS',
                 source: 'github_webhook',
                 prId: pullRequest.id,
                 prUrl: pr.html_url,
@@ -503,7 +577,7 @@ export class GithubService {
           featureId,
           userId: feature.createdById,
           action: 'PR_MANUALLY_LINKED',
-          metadata: { 
+          metadata: {
             prId: pullRequestId,
             prUrl: pr.githubPrUrl,
           },
@@ -549,7 +623,7 @@ export class GithubService {
               featureId: oldFeatureId,
               userId: feature.createdById,
               action: 'PR_MANUALLY_UNLINKED',
-              metadata: { 
+              metadata: {
                 prId: pullRequestId,
                 prUrl: pr.githubPrUrl,
               },
