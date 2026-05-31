@@ -1,4 +1,4 @@
-import apiClient from './client';
+import apiClient from "./client";
 
 export interface RegisterData {
   email: string;
@@ -25,19 +25,30 @@ export interface AuthResponse {
 export const authApi = {
   // Register new workspace + admin user
   register: async (data: RegisterData): Promise<AuthResponse> => {
-    const response = await apiClient.post('/auth/register', data);
+    const response = await apiClient.post("/auth/register", data);
     return response.data;
   },
 
   // Login with email (finds workspace automatically)
   login: async (data: LoginData): Promise<AuthResponse> => {
-    const response = await apiClient.post('/auth/login', data);
+    const response = await apiClient.post("/auth/login", data);
     return response.data;
   },
 
   // Get current user info (from JWT token)
   getCurrentUser: async () => {
-    const response = await apiClient.get('/users/me');
+    const response = await apiClient.get("/users/me");
+    return response.data;
+  },
+  // Select workspace for multi-tenant users
+  selectWorkspace: async (
+    email: string,
+    workspaceId: string,
+  ): Promise<AuthResponse> => {
+    const response = await apiClient.post("/auth/select-workspace", {
+      email,
+      workspaceId,
+    });
     return response.data;
   },
 };
