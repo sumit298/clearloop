@@ -49,6 +49,7 @@ export class GithubService {
       return {
         connected: true,
         installationId: tenant.githubInstallationId,
+        projects: [],
       };
     }
     const projects = await this.prisma.project.findMany({
@@ -168,14 +169,6 @@ export class GithubService {
         select: { id: true, tenantId: true },
       });
 
-      if (projectsWithInstallation.length === 0) {
-        this.logger.warn(
-          `No projects found with installation ${installationId}`,
-          'GithubService',
-        );
-        return { message: 'No projects found to disconnect' };
-      }
-
       // Collect affected tenants
       const affectedTenantIds = new Set(
         projectsWithInstallation.map((p) => p.tenantId),
@@ -189,6 +182,14 @@ export class GithubService {
           githubRepoId: null,
         },
       });
+
+      if(projectsWithInstallation.length === 0) {
+        this.logger.warn(
+          `No projects found with installation ${installationId}`,
+          'GithubService',
+        );
+        return { message: 'Installation removed successfully' };
+      }
 
       // Update only affected tenants (multi-tenant safe)
       for (const tenantId of affectedTenantIds) {
