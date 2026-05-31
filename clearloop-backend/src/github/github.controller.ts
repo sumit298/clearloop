@@ -67,43 +67,46 @@ export class GithubController {
    * Called after user installs the app
    */
   @Get('install/callback')
-  async installationCallback(
-    @Query('installation_id') installationId: string,
-    @Query('setup_action') setupAction: string,
-    @Query('state') state: string,
-    @Res() res,
-  ) {
-    try {
-      // Decode state to get tenantId
-      const decoded = JSON.parse(Buffer.from(state, 'base64url').toString());
+async installationCallback(
+  @Query('installation_id') installationId: string,
+  @Query('setup_action') setupAction: string,
+  @Query('state') state: string,
+  @Res() res,
+) {
+  try {
+    console.log('=== GITHUB CALLBACK HIT ===');
+    console.log({
+      installationId,
+      setupAction,
+      state,
+    });
 
-      // Validate state shape
-      if (
-        typeof decoded.tenantId !== 'string' ||
-        typeof decoded.timestamp !== 'number'
-      ) {
-        throw new BadRequestException('Invalid state');
-      }
+    const decoded = JSON.parse(
+      Buffer.from(state, 'base64url').toString(),
+    );
 
-      // Validate timestamp (within 10 minutes)
-      if (Date.now() - decoded.timestamp > 600000) {
-        throw new BadRequestException('State expired');
-      }
+    console.log('Decoded state:', decoded);
 
-      // Store installation_id
-      await this.githubService.saveInstallation(
-        decoded.tenantId,
-        installationId,
-      );
+    await this.githubService.saveInstallation(
+      decoded.tenantId,
+      installationId,
+    );
 
-      // Redirect back to settings page
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-      res.redirect(`${frontendUrl}/dashboard/settings?github=connected`);
-    } catch (error) {
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-      res.redirect(`${frontendUrl}/dashboard/settings?github=error`);
-    }
+    console.log('Installation saved');
+
+    const frontendUrl = process.env.FRONTEND_URL;
+    return res.redirect(
+      `${frontendUrl}/dashboard/settings?github=connected`,
+    );
+  } catch (error) {
+    console.error('GitHub callback failed:', error);
+
+    const frontendUrl = process.env.FRONTEND_URL;
+    return res.redirect(
+      `${frontendUrl}/dashboard/settings?github=error`,
+    );
   }
+}
 
   /**
    * Get GitHub installation status
