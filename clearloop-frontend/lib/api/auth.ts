@@ -19,6 +19,7 @@ export interface AuthResponse {
     id: string;
     name: string;
     slug: string;
+    selectionToken: string;
   }>;
 }
 
@@ -44,10 +45,12 @@ export const authApi = {
   selectWorkspace: async (
     email: string,
     workspaceId: string,
+    selectionToken: string,
   ): Promise<AuthResponse> => {
     const response = await apiClient.post("/auth/select-workspace", {
       email,
       workspaceId,
+      selectionToken,
     });
     return response.data;
   },

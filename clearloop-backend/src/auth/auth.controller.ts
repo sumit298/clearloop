@@ -141,8 +141,14 @@ export class AuthController {
   }
 
   @Post('select-workspace')
-async selectWorkspace(@Body() body: { email: string; workspaceId: string }) {
-  return this.authService.selectWorkspace(body.email, body.workspaceId);
-}
+  async selectWorkspace(
+    @Body() body: { email: string; workspaceId: string; selectionToken: string },
+  ) {
+    return this.authService.selectWorkspace(
+      body.email,
+      body.workspaceId,
+      body.selectionToken,
+    );
+  }
 
 }

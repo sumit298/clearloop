@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { RegisterDto, LoginDto } from './dto/auth.dto';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -88,13 +89,33 @@ export class AuthService {
 
     // If multiple workspaces, return list for selection
     if (users.length > 1) {
+      // Generate selection tokens for each workspace
+      const selectionTokens = await Promise.all(
+        users.map(async (u) => {
+          const token = crypto.randomBytes(32).toString('hex');
+          const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes TTL
+
+          await this.prisma.workspaceSelectionToken.create({
+            data: {
+              token,
+              email: dto.email,
+              tenantId: u.tenant.id,
+              expiresAt,
+            },
+          });
+
+          return {
+            id: u.tenant.id,
+            name: u.tenant.name,
+            slug: u.tenant.slug,
+            selectionToken: token,
+          };
+        }),
+      );
+
       return {
         requiresWorkspaceSelection: true,
-        workspaces: users.map((u) => ({
-          id: u.tenant.id,
-          name: u.tenant.name,
-          slug: u.tenant.slug,
-        })),
+        workspaces: selectionTokens,
       };
     }
 
@@ -171,17 +192,69 @@ export class AuthService {
       return this.signToken(user.id, user.tenantId, user.role);
     }
 
+    // Generate selection tokens for each workspace
+    const selectionTokens = await Promise.all(
+      users.map(async (u) => {
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes TTL
+
+        await this.prisma.workspaceSelectionToken.create({
+          data: {
+            token,
+            email,
+            tenantId: u.tenant.id,
+            expiresAt,
+          },
+        });
+
+        return {
+          id: u.tenant.id,
+          name: u.tenant.name,
+          slug: u.tenant.slug,
+          selectionToken: token,
+        };
+      }),
+    );
+
     return {
       requiresWorkspaceSelection: true,
-      workspaces: users.map((u) => ({
-        id: u.tenant.id,
-        name: u.tenant.name,
-        slug: u.tenant.slug,
-      })),
+      workspaces: selectionTokens,
     };
   }
 
-  async selectWorkspace(email: string, workspaceId: string) {
+  async selectWorkspace(
+    email: string,
+    workspaceId: string,
+    selectionToken: string,
+  ) {
+    // Validate and consume the selection token
+    const tokenRecord = await this.prisma.workspaceSelectionToken.findUnique({
+      where: { token: selectionToken },
+    });
+
+    if (!tokenRecord) {
+      throw new UnauthorizedException('Invalid selection token');
+    }
+
+    if (tokenRecord.consumed) {
+      throw new UnauthorizedException('Selection token already used');
+    }
+
+    if (tokenRecord.expiresAt < new Date()) {
+      throw new UnauthorizedException('Selection token expired');
+    }
+
+    if (tokenRecord.email !== email || tokenRecord.tenantId !== workspaceId) {
+      throw new UnauthorizedException('Selection token mismatch');
+    }
+
+    // Mark token as consumed
+    await this.prisma.workspaceSelectionToken.update({
+      where: { token: selectionToken },
+      data: { consumed: true },
+    });
+
+    // Find the user
     const user = await this.prisma.user.findFirst({
       where: {
         email,

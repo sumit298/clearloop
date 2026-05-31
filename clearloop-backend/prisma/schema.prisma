@@ -228,6 +228,18 @@ model ActivityLog {
   @@map("activity_logs")
 }
 
+model WorkspaceSelectionToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  email     String
+  tenantId  String
+  consumed  Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("workspace_selection_tokens")
+}
+
 enum TenantPlan {
   FREE
   PRO

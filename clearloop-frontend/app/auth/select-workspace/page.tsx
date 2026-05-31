@@ -11,7 +11,7 @@ function SelectWorkspaceContent() {
   const { login } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [workspaces, setWorkspaces] = useState<Array<{ id: string; name: string; slug: string }>>([]);
+  const [workspaces, setWorkspaces] = useState<Array<{ id: string; name: string; slug: string; selectionToken: string }>>([]);
   const [email, setEmail] = useState("");
 
   useEffect(() => {
@@ -24,8 +24,14 @@ function SelectWorkspaceContent() {
     }
 
     try {
-      const parsedWorkspaces = JSON.parse(decodeURIComponent(workspacesParam));
-      setEmail(decodeURIComponent(emailParam));
+      const parsedWorkspaces = JSON.parse(workspacesParam);
+
+      if (!Array.isArray(parsedWorkspaces)) {
+        router.push("/signin?error=Invalid workspace data");
+        return;
+      }
+
+      setEmail(emailParam);
       setWorkspaces(parsedWorkspaces);
     } catch (err) {
       router.push("/signin?error=Invalid workspace data");
@@ -37,7 +43,13 @@ function SelectWorkspaceContent() {
     setError("");
 
     try {
-      const response = await authApi.selectWorkspace(email, workspaceId);
+      const workspace = workspaces.find((w) => w.id === workspaceId);
+      if (!workspace) {
+        setError("Workspace not found");
+        return;
+      }
+
+      const response = await authApi.selectWorkspace(email, workspaceId, workspace.selectionToken);
       await login(response.access_token);
       router.push("/dashboard");
     } catch (err: any) {
