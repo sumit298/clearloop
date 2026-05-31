@@ -196,7 +196,10 @@ export default function SignIn() {
                 <div className="mt-6 grid grid-cols-2 gap-3">
                   <button 
                     type="button"
-                    onClick={() => window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/github`}
+                    onClick={() => {
+                      const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:8000';
+                      window.location.href = `${apiUrl}/auth/github`;
+                    }}
                     className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-surface-2"
                   >
                     <svg
@@ -210,7 +213,10 @@ export default function SignIn() {
                   </button>
                   <button 
                     type="button"
-                    onClick={() => window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/google`}
+                    onClick={() => {
+                      const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:8000';
+                      window.location.href = `${apiUrl}/auth/google`;
+                    }}
                     className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-surface-2"
                   >
                     <svg
