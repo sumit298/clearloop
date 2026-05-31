@@ -14,7 +14,6 @@ import {
   Delete,
 } from '@nestjs/common';
 import { GithubService } from './github.service';
-import type { GitHubWebhookDto } from './dto/github-webhook.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
 import { Roles, RolesGuard } from '../auth/guards/roles.guard';
@@ -33,23 +32,33 @@ export class GithubController {
   @UseGuards(JwtAuthGuard, TenantGuard)
   async getInstallUrl(@Request() req: AuthenticatedRequest) {
     const clientId = process.env.GITHUB_APP_CLIENT_ID;
-    
+
     if (!clientId) {
       throw new BadRequestException('GitHub App not configured');
     }
-    
+
+    const installation = await this.githubService.getInstallation(req.tenantId);
+
+    if (installation.connected && installation.installationId) {
+      return {
+        url: `https://github.com/settings/installations/${installation.installationId}`,
+        alreadyInstalled: true,
+      };
+    }
+
     // Create signed state with timestamp
     const state = Buffer.from(
-      JSON.stringify({ 
+      JSON.stringify({
         tenantId: req.tenantId,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       }),
     ).toString('base64url');
-    
+
     const installUrl = `https://github.com/apps/${process.env.GITHUB_APP_NAME}/installations/new`;
-    
+
     return {
       url: `${installUrl}?state=${state}`,
+      alreadyInstalled: false,
     };
   }
 
@@ -66,23 +75,27 @@ export class GithubController {
   ) {
     try {
       // Decode state to get tenantId
-      const decoded = JSON.parse(
-        Buffer.from(state, 'base64url').toString(),
-      );
-      
+      const decoded = JSON.parse(Buffer.from(state, 'base64url').toString());
+
       // Validate state shape
-      if (typeof decoded.tenantId !== 'string' || typeof decoded.timestamp !== 'number') {
+      if (
+        typeof decoded.tenantId !== 'string' ||
+        typeof decoded.timestamp !== 'number'
+      ) {
         throw new BadRequestException('Invalid state');
       }
-      
+
       // Validate timestamp (within 10 minutes)
       if (Date.now() - decoded.timestamp > 600000) {
         throw new BadRequestException('State expired');
       }
-      
+
       // Store installation_id
-      await this.githubService.saveInstallation(decoded.tenantId, installationId);
-      
+      await this.githubService.saveInstallation(
+        decoded.tenantId,
+        installationId,
+      );
+
       // Redirect back to settings page
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
       res.redirect(`${frontendUrl}/dashboard/settings?github=connected`);
@@ -134,7 +147,7 @@ export class GithubController {
     if (event !== 'pull_request') {
       return { message: `Event ${event} ignored` };
     }
-    
+
     return this.githubService.handleWebhook(payload);
   }
 
@@ -196,36 +209,40 @@ export class GithubController {
   /**
    * Verify GitHub webhook signature
    */
-  private verifyWebhookSignature(rawBody: Buffer | undefined, signature: string) {
-  const secret = process.env.GITHUB_WEBHOOK_SECRET;
-  
-  // If no secret configured, skip verification (dev mode)
-  if (!secret) {
-    console.log('⚠️  Webhook signature verification skipped (no secret configured)');
-    return;
+  private verifyWebhookSignature(
+    rawBody: Buffer | undefined,
+    signature: string,
+  ) {
+    const secret = process.env.GITHUB_WEBHOOK_SECRET;
+
+    // If no secret configured, skip verification (dev mode)
+    if (!secret) {
+      console.log(
+        '⚠️  Webhook signature verification skipped (no secret configured)',
+      );
+      return;
+    }
+
+    if (!signature) {
+      throw new BadRequestException('Missing signature');
+    }
+
+    if (!rawBody) {
+      throw new BadRequestException('Missing request body');
+    }
+
+    const hmac = crypto.createHmac('sha256', secret);
+    const expectedSignature = 'sha256=' + hmac.update(rawBody).digest('hex');
+
+    const sigBuffer = Buffer.from(signature, 'utf-8');
+    const expectedBuffer = Buffer.from(expectedSignature, 'utf-8');
+
+    if (sigBuffer.length !== expectedBuffer.length) {
+      throw new BadRequestException('Invalid signature');
+    }
+
+    if (!crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
+      throw new BadRequestException('Invalid signature');
+    }
   }
-
-  if (!signature) {
-    throw new BadRequestException('Missing signature');
-  }
-
-  if (!rawBody) {
-    throw new BadRequestException('Missing request body');
-  }
-
-  const hmac = crypto.createHmac('sha256', secret);
-  const expectedSignature = 'sha256=' + hmac.update(rawBody).digest('hex');
-
-  const sigBuffer = Buffer.from(signature, 'utf-8');
-  const expectedBuffer = Buffer.from(expectedSignature, 'utf-8');
-
-  if (sigBuffer.length !== expectedBuffer.length) {
-    throw new BadRequestException('Invalid signature');
-  }
-
-  if (!crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
-    throw new BadRequestException('Invalid signature');
-  }
-}
-
 }
