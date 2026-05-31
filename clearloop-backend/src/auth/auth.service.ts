@@ -1,8 +1,8 @@
 import {
   Injectable,
-  ConflictException,
   UnauthorizedException,
   InternalServerErrorException,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -23,7 +23,7 @@ export class AuthService {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
       .substring(0, 30);
-    
+
     const randomSuffix = Math.random().toString(36).substring(2, 8);
     const slug = `${baseSlug}-${randomSuffix}`;
 
@@ -126,72 +126,130 @@ export class AuthService {
   async validateOAuthUser(profile: any, provider: 'google' | 'github') {
     const { email, name, avatarUrl, tenant } = profile;
 
-    if(!email){
-      throw new UnauthorizedException("Email is required for authentication")
+    if (!email) {
+      throw new UnauthorizedException('Email is required for authentication');
     }
+
     const providerId =
       provider === 'google' ? profile.googleId : profile.githubId;
 
-    const tenantRecord = await this.prisma.tenant.findUnique({
-      where: { slug: tenant },
+    const users = await this.prisma.user.findMany({
+      where: { email },
+      include: { tenant: true },
     });
 
-    if (!tenantRecord) throw new UnauthorizedException('Tenant not found');
-
-    const existingByProvider = await this.prisma.user.findFirst({
-      where: {
-        tenantId: tenantRecord.id,
-        [provider === 'google' ? 'googleId' : 'githubId']: providerId,
-      },
-    });
-
-    if (existingByProvider)
-      return this.signToken(
-        existingByProvider.id,
-        tenantRecord.id,
-        existingByProvider.role,
-      );
-
-    const existingByEmail = await this.prisma.user.findFirst({
-      where: {
-        tenantId: tenantRecord.id,
+    if (users.length === 0) {
+      return this.createOAuthUser(
         email,
-      },
-    });
-
-    if (existingByEmail) {
-      await this.prisma.user.update({
-        where: { id: existingByEmail.id },
-        data: {
-          [provider === 'google' ? 'googleId' : 'githubId']: providerId,
-          oauthProvider: provider,
-          avatarUrl: avatarUrl || existingByEmail.avatarUrl,
-          githubUsername:
-            provider === 'github'
-              ? profile.githubUsername
-              : existingByEmail.githubUsername,
-        },
-      });
-
-      return this.signToken(
-        existingByEmail.id,
-        tenantRecord.id,
-        existingByEmail.role,
+        name,
+        avatarUrl,
+        providerId,
+        provider,
+        profile,
       );
     }
 
-    const newUser = await this.prisma.user.create({
-      data: {
+    if (users.length === 1) {
+      const user = users[0];
+
+      if (!user) throw new UnauthorizedException('User not found');
+
+      if (!user[provider === 'google' ? 'googleId' : 'githubId']) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            [provider === 'google' ? 'googleId' : 'githubId']: providerId,
+            oauthProvider: provider,
+            avatarUrl: avatarUrl || user.avatarUrl,
+            githubUsername:
+              provider === 'github'
+                ? profile.githubUsername
+                : user.githubUsername,
+          },
+        });
+      }
+      return this.signToken(user.id, user.tenantId, user.role);
+    }
+
+    return {
+      requiresWorkspaceSelection: true,
+      workspaces: users.map((u) => ({
+        id: u.tenant.id,
+        name: u.tenant.name,
+        slug: u.tenant.slug,
+      })),
+    };
+  }
+
+  async selectWorkspace(email: string, workspaceId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: {
         email,
-        name,
-        tenantId: tenantRecord.id,
-        avatarUrl,
-        [provider === 'google' ? 'googleId' : 'githubId']: providerId,
-        oauthProvider: provider,
-        githubUsername: provider === 'github' ? profile.githubUsername : null,
-        role: 'DEVELOPER',
+        tenantId: workspaceId,
       },
     });
-    return this.signToken(newUser.id, tenantRecord.id, newUser.role);
+
+    if (!user) {
+      throw new UnauthorizedException('User not found in workspace');
+    }
+
+    return this.signToken(user.id, user.tenantId, user.role);
+  }
+
+  private async createOAuthUser(
+    email: string,
+    name: string,
+    avatarUrl: string | null,
+    providerId: string,
+    provider: 'google' | 'github',
+    profile: any,
+  ) {
+    // Extract company name from email domain
+    const parts = email.split('@');
+    const domain = parts[1];
+
+    if (!domain) {
+      throw new BadRequestException('Invalid email format');
+    }
+
+    const companyName = domain.split('.')[0];
+
+    if (!companyName) {
+      throw new BadRequestException('Cannot extract company name from email');
+    }
+
+    const baseSlug = companyName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .substring(0, 30);
+
+    const randomSuffix = Math.random().toString(36).substring(2, 8);
+    const slug = `${baseSlug}-${randomSuffix}`;
+
+    const tenant = await this.prisma.tenant.create({
+      data: {
+        name: companyName.charAt(0).toUpperCase() + companyName.slice(1),
+        slug,
+        users: {
+          create: {
+            email,
+            name,
+            avatarUrl,
+            [provider === 'google' ? 'googleId' : 'githubId']: providerId,
+            oauthProvider: provider,
+            githubUsername:
+              provider === 'github' ? profile.githubUsername : null,
+            role: 'ADMIN',
+          },
+        },
+      },
+      include: { users: true },
+    });
+
+    const user = tenant.users[0];
+    if (!user) throw new InternalServerErrorException('User creation failed');
+
+    return this.signToken(user.id, tenant.id, user.role);
   }
 }
