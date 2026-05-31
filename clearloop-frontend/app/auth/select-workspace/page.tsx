@@ -13,20 +13,27 @@ function SelectWorkspaceContent() {
   const [error, setError] = useState("");
   const [workspaces, setWorkspaces] = useState<Array<{ id: string; name: string; slug: string }>>([]);
   const [email, setEmail] = useState("");
+  const [selectionToken, setSelectionToken] = useState("");
 
   useEffect(() => {
     const emailParam = searchParams.get("email");
     const workspacesParam = searchParams.get("workspaces");
+    const selectionTokenParam = searchParams.get("selectionToken");
 
-    if (!emailParam || !workspacesParam) {
+    if (!emailParam || !workspacesParam || !selectionTokenParam) {
       router.push("/signin?error=Invalid workspace selection");
       return;
     }
 
     try {
-      const parsedWorkspaces = JSON.parse(decodeURIComponent(workspacesParam));
-      setEmail(decodeURIComponent(emailParam));
+      const parsedWorkspaces = JSON.parse(workspacesParam);
+      if (!Array.isArray(parsedWorkspaces)) {
+        router.push("/signin?error=Invalid workspace data");
+        return;
+      }
+      setEmail(emailParam);
       setWorkspaces(parsedWorkspaces);
+      setSelectionToken(selectionTokenParam);
     } catch (err) {
       router.push("/signin?error=Invalid workspace data");
     }
@@ -37,7 +44,7 @@ function SelectWorkspaceContent() {
     setError("");
 
     try {
-      const response = await authApi.selectWorkspace(email, workspaceId);
+      const response = await authApi.selectWorkspace(email, workspaceId, selectionToken);
       await login(response.access_token);
       router.push("/dashboard");
     } catch (err: any) {

@@ -7,6 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { RegisterDto, LoginDto } from './dto/auth.dto';
 
 @Injectable()
@@ -88,8 +89,12 @@ export class AuthService {
 
     // If multiple workspaces, return list for selection
     if (users.length > 1) {
+      // Generate selection token for secure workspace selection
+      const selectionToken = await this.generateSelectionToken(user.email, users.map(u => u.tenantId));
+
       return {
         requiresWorkspaceSelection: true,
+        selectionToken,
         workspaces: users.map((u) => ({
           id: u.tenant.id,
           name: u.tenant.name,
@@ -171,8 +176,12 @@ export class AuthService {
       return this.signToken(user.id, user.tenantId, user.role);
     }
 
+    // Generate selection token for secure workspace selection
+    const selectionToken = await this.generateSelectionToken(email, users.map(u => u.tenantId));
+
     return {
       requiresWorkspaceSelection: true,
+      selectionToken,
       workspaces: users.map((u) => ({
         id: u.tenant.id,
         name: u.tenant.name,
@@ -181,7 +190,39 @@ export class AuthService {
     };
   }
 
-  async selectWorkspace(email: string, workspaceId: string) {
+  async selectWorkspace(email: string, workspaceId: string, selectionToken: string) {
+    // Validate the selection token
+    const tokenRecord = await this.prisma.workspaceSelectionToken.findUnique({
+      where: { token: selectionToken },
+    });
+
+    if (!tokenRecord) {
+      throw new UnauthorizedException('Invalid or expired selection token');
+    }
+
+    if (tokenRecord.consumed) {
+      throw new UnauthorizedException('Selection token already used');
+    }
+
+    if (tokenRecord.expiresAt < new Date()) {
+      throw new UnauthorizedException('Selection token expired');
+    }
+
+    if (tokenRecord.email !== email) {
+      throw new UnauthorizedException('Selection token does not match email');
+    }
+
+    if (tokenRecord.tenantId !== workspaceId) {
+      throw new UnauthorizedException('Selection token does not match workspace');
+    }
+
+    // Mark token as consumed
+    await this.prisma.workspaceSelectionToken.update({
+      where: { token: selectionToken },
+      data: { consumed: true },
+    });
+
+    // Fetch user to generate JWT
     const user = await this.prisma.user.findFirst({
       where: {
         email,
@@ -194,6 +235,24 @@ export class AuthService {
     }
 
     return this.signToken(user.id, user.tenantId, user.role);
+  }
+
+  private async generateSelectionToken(email: string, tenantIds: string[]): Promise<string> {
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 10); // 10 minute TTL
+
+    // Create a token record for each workspace the user belongs to
+    await this.prisma.workspaceSelectionToken.createMany({
+      data: tenantIds.map(tenantId => ({
+        email,
+        tenantId,
+        token,
+        expiresAt,
+      })),
+    });
+
+    return token;
   }
 
   private async createOAuthUser(

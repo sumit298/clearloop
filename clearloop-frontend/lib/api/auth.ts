@@ -15,6 +15,7 @@ export interface LoginData {
 export interface AuthResponse {
   access_token: string;
   requiresWorkspaceSelection?: boolean;
+  selectionToken?: string;
   workspaces?: Array<{
     id: string;
     name: string;
@@ -44,10 +45,12 @@ export const authApi = {
   selectWorkspace: async (
     email: string,
     workspaceId: string,
+    selectionToken: string,
   ): Promise<AuthResponse> => {
     const response = await apiClient.post("/auth/select-workspace", {
       email,
       workspaceId,
+      selectionToken,
     });
     return response.data;
   },

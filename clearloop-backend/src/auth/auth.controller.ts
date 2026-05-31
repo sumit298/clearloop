@@ -67,8 +67,9 @@ export class AuthController {
           JSON.stringify(result.workspaces),
         );
         const email = encodeURIComponent(req.user.email);
+        const selectionToken = encodeURIComponent(result.selectionToken);
         res.redirect(
-          `${frontendUrl}/auth/select-workspace?email=${email}&workspaces=${workspaces}`,
+          `${frontendUrl}/auth/select-workspace?email=${email}&workspaces=${workspaces}&selectionToken=${selectionToken}`,
         );
         return;
       }
@@ -119,8 +120,9 @@ export class AuthController {
           JSON.stringify(result.workspaces),
         );
         const email = encodeURIComponent(req.user.email);
+        const selectionToken = encodeURIComponent(result.selectionToken);
         res.redirect(
-          `${frontendUrl}/auth/select-workspace?email=${email}&workspaces=${workspaces}`,
+          `${frontendUrl}/auth/select-workspace?email=${email}&workspaces=${workspaces}&selectionToken=${selectionToken}`,
         );
         return;
       }
@@ -141,8 +143,8 @@ export class AuthController {
   }
 
   @Post('select-workspace')
-async selectWorkspace(@Body() body: { email: string; workspaceId: string }) {
-  return this.authService.selectWorkspace(body.email, body.workspaceId);
-}
+  async selectWorkspace(@Body() body: { email: string; workspaceId: string; selectionToken: string }) {
+    return this.authService.selectWorkspace(body.email, body.workspaceId, body.selectionToken);
+  }
 
 }

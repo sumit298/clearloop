@@ -1,29 +1,43 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-function GitHubCallbackContent() {
+export default function GitHubCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('Connecting to GitHub...');
 
   useEffect(() => {
-    handleCallback();
+    let successTimerId: NodeJS.Timeout | null = null;
+    let errorTimerId: NodeJS.Timeout | null = null;
+
+    const cleanup = () => {
+      if (successTimerId) clearTimeout(successTimerId);
+      if (errorTimerId) clearTimeout(errorTimerId);
+    };
+
+    handleCallback(cleanup, (id) => { successTimerId = id; }, (id) => { errorTimerId = id; });
+
+    return cleanup;
   }, []);
 
-  const handleCallback = async () => {
+  const handleCallback = async (cleanup: () => void, setSuccessTimer: (id: NodeJS.Timeout) => void, setErrorTimer: (id: NodeJS.Timeout) => void) => {
     try {
       const installationId = searchParams.get('installation_id');
       const setupAction = searchParams.get('setup_action');
-      
+
       if (!installationId) {
         throw new Error('Missing installation ID');
       }
 
       // Send to backend
       const token = localStorage.getItem('clearloop_token');
+      if (!token) {
+        throw new Error('Authentication required. Please sign in first.');
+      }
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/github/installation`, {
         method: 'POST',
         headers: {
@@ -39,19 +53,23 @@ function GitHubCallbackContent() {
 
       setStatus('success');
       setMessage('Successfully connected to GitHub!');
-      
-      setTimeout(() => {
+
+      cleanup();
+      const timerId = setTimeout(() => {
         router.push('/dashboard/settings?github=connected');
       }, 1500);
+      setSuccessTimer(timerId);
 
     } catch (error: any) {
       console.error('GitHub callback error:', error);
       setStatus('error');
       setMessage(error.message || 'Failed to connect GitHub');
-      
-      setTimeout(() => {
+
+      cleanup();
+      const timerId = setTimeout(() => {
         router.push('/dashboard/settings?github=error');
       }, 3000);
+      setErrorTimer(timerId);
     }
   };
 
@@ -98,20 +116,5 @@ function GitHubCallbackContent() {
         )}
       </div>
     </div>
-  );
-}
-
-export default function GitHubCallbackPage() {
-  return (
-    <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="mb-4 inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-          <p className="text-text-dim">Loading...</p>
-        </div>
-      </div>
-    }>
-      <GitHubCallbackContent />
-    </Suspense>
   );
 }
