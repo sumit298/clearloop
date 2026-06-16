@@ -27,6 +27,7 @@ async function bootstrap() {
   app.use(
     '/github/webhook',
     bodyParser.json({
+      limit: "10mb",
       verify: (req: any, res, buf) => {
         req.rawBody = buf;
       },
