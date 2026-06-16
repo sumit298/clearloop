@@ -37,16 +37,18 @@ export class GithubController {
       throw new BadRequestException('GitHub App not configured');
     }
 
+    // Check if installation already exists
     const installation = await this.githubService.getInstallation(req.tenantId);
 
     if (installation.connected && installation.installationId) {
+      // Already installed - return configuration URL
       return {
         url: `https://github.com/settings/installations/${installation.installationId}`,
         alreadyInstalled: true,
       };
     }
 
-    // Create signed state with timestamp
+    // Not installed - return installation URL with state
     const state = Buffer.from(
       JSON.stringify({
         tenantId: req.tenantId,
@@ -67,46 +69,40 @@ export class GithubController {
    * Called after user installs the app
    */
   @Get('install/callback')
-async installationCallback(
-  @Query('installation_id') installationId: string,
-  @Query('setup_action') setupAction: string,
-  @Query('state') state: string,
-  @Res() res,
-) {
-  try {
-    console.log('=== GITHUB CALLBACK HIT ===');
-    console.log({
-      installationId,
-      setupAction,
-      state,
-    });
+  async installationCallback(
+    @Query('installation_id') installationId: string,
+    @Query('setup_action') setupAction: string,
+    @Query('state') state: string,
+    @Res() res,
+  ) {
+    try {
+      console.log('=== GITHUB CALLBACK HIT ===');
+      console.log({
+        installationId,
+        setupAction,
+        state,
+      });
 
-    const decoded = JSON.parse(
-      Buffer.from(state, 'base64url').toString(),
-    );
+      const decoded = JSON.parse(Buffer.from(state, 'base64url').toString());
 
-    console.log('Decoded state:', decoded);
+      console.log('Decoded state:', decoded);
 
-    await this.githubService.saveInstallation(
-      decoded.tenantId,
-      installationId,
-    );
+      await this.githubService.saveInstallation(
+        decoded.tenantId,
+        installationId,
+      );
 
-    console.log('Installation saved');
+      console.log('Installation saved');
 
-    const frontendUrl = process.env.FRONTEND_URL;
-    return res.redirect(
-      `${frontendUrl}/dashboard/settings?github=connected`,
-    );
-  } catch (error) {
-    console.error('GitHub callback failed:', error);
+      const frontendUrl = process.env.FRONTEND_URL;
+      return res.redirect(`${frontendUrl}/dashboard/settings?github=connected`);
+    } catch (error) {
+      console.error('GitHub callback failed:', error);
 
-    const frontendUrl = process.env.FRONTEND_URL;
-    return res.redirect(
-      `${frontendUrl}/dashboard/settings?github=error`,
-    );
+      const frontendUrl = process.env.FRONTEND_URL;
+      return res.redirect(`${frontendUrl}/dashboard/settings?github=error`);
+    }
   }
-}
 
   /**
    * Get GitHub installation status
