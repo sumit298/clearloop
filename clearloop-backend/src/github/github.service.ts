@@ -242,7 +242,8 @@ export class GithubService {
 
     const tenantId = project.tenantId;
 
-    const featureId = this.extractFeatureId(
+    const featureId = await this.extractFeatureId(
+      tenantId,
       pull_request.head.ref,
       pull_request.body,
     );
@@ -513,40 +514,80 @@ export class GithubService {
 
   /**
    * Extract feature ID from branch name or PR body
+   * Handles both feature/ and bug/ branches
    */
-  private extractFeatureId(
+  private async extractFeatureId(
+    tenantId: string,
     branchName: string,
     prBody: string | null,
-  ): string | null {
-    const branchPatterns = [
-      /feature[\/\-]([a-f0-9-]{36})/i,
-      /feat[\/\-]([a-f0-9-]{36})/i,
-      /([a-f0-9-]{36})/i,
+  ): Promise<string | null> {
+    // Check for bug/ pattern first
+    const bugMatch = branchName.match(/bug[\\/\-]([a-f0-9-]{36})/i);
+    if (bugMatch) {
+      const bugId = bugMatch[1];
+      this.logger.log(`Detected bug branch: ${bugId}`, 'GithubService');
+      
+      const bug = await this.prisma.bugReport.findFirst({
+        where: { id: bugId, tenantId },
+        select: { featureId: true },
+      });
+      
+      if (bug?.featureId) {
+        this.logger.log(`Bug ${bugId} linked to feature ${bug.featureId}`, 'GithubService');
+        return bug.featureId;
+      } else {
+        this.logger.warn(`Bug ${bugId} not found or not linked to feature`, 'GithubService');
+        return null;
+      }
+    }
+
+    // Check for feature/ pattern
+    const featurePatterns = [
+      /feature[\\/\-]([a-f0-9-]{36})/i,
+      /feat[\\/\-]([a-f0-9-]{36})/i,
     ];
 
-    for (const pattern of branchPatterns) {
+    for (const pattern of featurePatterns) {
       const match = branchName.match(pattern);
       if (match && match[1]) {
+        this.logger.log(`Detected feature branch: ${match[1]}`, 'GithubService');
         return match[1];
       }
     }
 
+    // Check PR body for keywords
     if (prBody) {
       const bodyPatterns = [
         /closes\s+#([a-f0-9-]{36})/i,
         /fixes\s+#([a-f0-9-]{36})/i,
         /feature:\s*#?([a-f0-9-]{36})/i,
-        /feature-id:\s*([a-f0-9-]{36})/i,
+        /bug:\s*#?([a-f0-9-]{36})/i,
       ];
 
       for (const pattern of bodyPatterns) {
         const match = prBody.match(pattern);
         if (match && match[1]) {
-          return match[1];
+          const id = match[1];
+          
+          // Check if it's a bug ID
+          const bug = await this.prisma.bugReport.findFirst({
+            where: { id, tenantId },
+            select: { featureId: true },
+          });
+          
+          if (bug?.featureId) {
+            this.logger.log(`PR body references bug ${id} linked to feature ${bug.featureId}`, 'GithubService');
+            return bug.featureId;
+          }
+          
+          // Otherwise assume it's a feature ID
+          this.logger.log(`PR body references feature ${id}`, 'GithubService');
+          return id;
         }
       }
     }
 
+    this.logger.log('No feature or bug ID found in branch or PR body', 'GithubService');
     return null;
   }
 
