@@ -526,17 +526,23 @@ export class GithubService {
     if (bugMatch) {
       const bugId = bugMatch[1];
       this.logger.log(`Detected bug branch: ${bugId}`, 'GithubService');
-      
+
       const bug = await this.prisma.bugReport.findFirst({
         where: { id: bugId, tenantId },
         select: { featureId: true },
       });
-      
+
       if (bug?.featureId) {
-        this.logger.log(`Bug ${bugId} linked to feature ${bug.featureId}`, 'GithubService');
+        this.logger.log(
+          `Bug ${bugId} linked to feature ${bug.featureId}`,
+          'GithubService',
+        );
         return bug.featureId;
       } else {
-        this.logger.warn(`Bug ${bugId} not found or not linked to feature`, 'GithubService');
+        this.logger.warn(
+          `Bug ${bugId} not found or not linked to feature`,
+          'GithubService',
+        );
         return null;
       }
     }
@@ -550,44 +556,74 @@ export class GithubService {
     for (const pattern of featurePatterns) {
       const match = branchName.match(pattern);
       if (match && match[1]) {
-        this.logger.log(`Detected feature branch: ${match[1]}`, 'GithubService');
+        this.logger.log(
+          `Detected feature branch: ${match[1]}`,
+          'GithubService',
+        );
         return match[1];
       }
     }
 
     // Check PR body for keywords
     if (prBody) {
-      const bodyPatterns = [
+      const bugBodyMatch = prBody.match(/bug:\s*#?([a-f0-9-]{36})/i);
+
+      if (bugBodyMatch) {
+        const bugId = bugBodyMatch[1];
+        const bug = await this.prisma.bugReport.findFirst({
+          where: { id: bugId, tenantId },
+          select: { featureId: true },
+        });
+        if (bug?.featureId) {
+          this.logger.log(
+            `PR body references bug ${bugId} linked to feature ${bug.featureId}`,
+            'GithubService',
+          );
+          return bug.featureId;
+        }
+        this.logger.warn(
+          `Bug ${bugId} not found or not linked to feature`,
+          'GithubService',
+        );
+        return null;
+      }
+
+      // Check for explicit feature reference
+      const featureBodyMatch = prBody.match(/feature:\s*#?([a-f0-9-]{36})/i);
+      if (featureBodyMatch) {
+        this.logger.log(
+          `PR body references feature ${featureBodyMatch[1]}`,
+          'GithubService',
+        );
+        return featureBodyMatch[1] ?? null;
+      }
+
+      // Check for generic closes/fixes - try bug first, then assume feature
+      const genericPatterns = [
         /closes\s+#([a-f0-9-]{36})/i,
         /fixes\s+#([a-f0-9-]{36})/i,
-        /feature:\s*#?([a-f0-9-]{36})/i,
-        /bug:\s*#?([a-f0-9-]{36})/i,
       ];
-
-      for (const pattern of bodyPatterns) {
+      for (const pattern of genericPatterns) {
         const match = prBody.match(pattern);
         if (match && match[1]) {
           const id = match[1];
-          
-          // Check if it's a bug ID
           const bug = await this.prisma.bugReport.findFirst({
             where: { id, tenantId },
             select: { featureId: true },
           });
-          
           if (bug?.featureId) {
-            this.logger.log(`PR body references bug ${id} linked to feature ${bug.featureId}`, 'GithubService');
+            this.logger.log(
+              `PR body references bug ${id} linked to feature ${bug.featureId}`,
+              'GithubService',
+            );
             return bug.featureId;
           }
-          
-          // Otherwise assume it's a feature ID
           this.logger.log(`PR body references feature ${id}`, 'GithubService');
           return id;
         }
       }
     }
-
-    this.logger.log('No feature or bug ID found in branch or PR body', 'GithubService');
+    this.logger.log(`No feature ID detected`, 'GithubService');
     return null;
   }
 
@@ -692,7 +728,7 @@ export class GithubService {
   /**
    * List all PRs for a tenant
    */
-  async listPullRequests(tenantId: string, featureId?: string) {
+  async listPullRequests(tenantId: string, featureId?: string | null) {
     return this.prisma.pullRequest.findMany({
       where: {
         tenantId,
