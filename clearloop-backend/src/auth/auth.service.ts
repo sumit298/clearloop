@@ -52,6 +52,18 @@ export class AuthService {
           data: { email, name: dto.name, passwordHash },
         });
       }
+      else if(user.passwordHash){
+        throw new BadRequestException('Account already exists, please log in');
+      }
+      else {
+        // oauth only account claiming for first time
+        user = await tx.user.update({
+          where: { id: user.id },
+          data: { passwordHash },
+        
+        })
+      }
+
 
       const tenant = await tx.tenant.create({
         data: { name: dto.companyName, slug },
@@ -116,38 +128,6 @@ export class AuthService {
 
     return this.createLoginSession(user.id, memberships);
   }
-
-  // // Legacy slug-based login. Only kept for backward compatibility with any
-  // // existing bookmarked/tested flows — not part of the current auth path.
-  // // Safe to delete entirely once you confirm nothing calls it.
-  // async login(dto: LoginDto, slug: string) {
-  //   const tenant = await this.prisma.tenant.findUnique({ where: { slug } });
-  //   if (!tenant) throw new UnauthorizedException('Invalid credentials');
-
-  //   const email = dto.email.toLowerCase();
-  //   const user = await this.prisma.user.findUnique({ where: { email } });
-  //   if (!user || !user.passwordHash) {
-  //     throw new UnauthorizedException('Invalid credentials');
-  //   }
-
-  //   const valid = await bcrypt.compare(dto.password, user.passwordHash);
-  //   if (!valid) throw new UnauthorizedException('Invalid credentials');
-
-  //   const member = await this.prisma.workspaceMember.findUnique({
-  //     where: { userId_tenantId: { userId: user.id, tenantId: tenant.id } },
-  //   });
-  //   if (!member || !member.isActive) {
-  //     throw new UnauthorizedException('Invalid credentials');
-  //   }
-
-  //   return this.signToken({
-  //     userId: user.id,
-  //     memberId: member.id,
-  //     tenantId: tenant.id,
-  //     role: member.role,
-  //     tokenVersion: member.tokenVersion,
-  //   });
-  // }
 
   // ---------------------------------------------------------------------
   // Multi-workspace selection (LoginSession-backed)
