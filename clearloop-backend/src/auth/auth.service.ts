@@ -51,19 +51,15 @@ export class AuthService {
         user = await tx.user.create({
           data: { email, name: dto.name, passwordHash },
         });
+      } else {
+        // Existing global identity (with or without a password): do not let
+        // an unauthenticated caller silently take it over just by knowing
+        // the email. Route password-claims through an authenticated /
+        // email-verified flow instead.
+        throw new BadRequestException(
+          'An account with this email already exists. Please log in instead.',
+        );
       }
-      else if(user.passwordHash){
-        throw new BadRequestException('Account already exists, please log in');
-      }
-      else {
-        // oauth only account claiming for first time
-        user = await tx.user.update({
-          where: { id: user.id },
-          data: { passwordHash },
-        
-        })
-      }
-
 
       const tenant = await tx.tenant.create({
         data: { name: dto.companyName, slug },
@@ -193,7 +189,9 @@ export class AuthService {
     const workspaces = matchedSession.workspaces as { id: string }[];
     const isAllowed = workspaces.some((w) => w.id === tenantId);
     if (!isAllowed) {
-      throw new UnauthorizedException('Workspace not permitted for this session');
+      throw new UnauthorizedException(
+        'Workspace not permitted for this session',
+      );
     }
 
     const member = await this.prisma.workspaceMember.findUnique({
@@ -243,7 +241,10 @@ export class AuthService {
 
     const existingIdentity = await this.prisma.authIdentity.findUnique({
       where: {
-        provider_providerAccountId: { provider: authProvider, providerAccountId },
+        provider_providerAccountId: {
+          provider: authProvider,
+          providerAccountId,
+        },
       },
     });
 
@@ -283,7 +284,12 @@ export class AuthService {
   }
 
   private async createOAuthWorkspace(
-    user: { id: string; email: string; name: string | null; avatarUrl: string | null },
+    user: {
+      id: string;
+      email: string;
+      name: string | null;
+      avatarUrl: string | null;
+    },
     profile: any,
     provider: 'google' | 'github',
   ) {
@@ -330,7 +336,7 @@ export class AuthService {
   // Token signing
   // ---------------------------------------------------------------------
 
-  private signToken(params: {
+  signToken(params: {
     userId: string;
     memberId: string;
     tenantId: string;

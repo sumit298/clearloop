@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
   Inject,
 } from '@nestjs/common';
 import type { LoggerService } from '@nestjs/common';
@@ -17,109 +18,153 @@ export class GithubService {
     private readonly logger: LoggerService,
   ) {}
 
-  /**
-   * Save GitHub App installation
-   */
-  async saveInstallation(tenantId: string, installationId: string) {
-    // Store installation_id in tenant's projects
-    // This will be updated when installation_repositories event fires
-    await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: {
-        githubInstallationId: installationId,
+  // ---------------------------------------------------------------------
+  // Installation lifecycle
+  // ---------------------------------------------------------------------
+
+  // Called after GitHub redirects back post-install. The controller is
+  // responsible for validating the signed GitHubInstallState nonce BEFORE
+  // calling this — this method only persists, it doesn't authenticate the
+  // callback. Upserts because GitHub can re-send an installation callback
+  // for an installation that already exists (e.g. permissions updated).
+  async saveInstallation(
+    tenantId: string,
+    githubInstallationId: string,
+    accountId?: string,
+    accountLogin?: string,
+    accountType?: string,
+  ) {
+    const installation = await this.prisma.gitHubInstallation.upsert({
+      where: { githubInstallationId },
+      create: {
+        tenantId,
+        githubInstallationId,
+        accountId,
+        accountLogin,
+        accountType,
+        status: 'ACTIVE',
+      },
+      update: {
+        status: 'ACTIVE',
+        accountId,
+        accountLogin,
+        accountType,
+        suspendedAt: null,
       },
     });
+
     this.logger.log(
-      `Installation ${installationId} saved for tenant ${tenantId}`,
+      `Installation ${githubInstallationId} saved for tenant ${tenantId}`,
       'GithubService',
     );
-    return { message: 'Installation saved', installationId };
+
+    return { message: 'Installation saved', installation };
   }
 
-  /**
-   * Get GitHub installation status
-   */
   async getInstallation(tenantId: string) {
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { githubInstallationId: true },
-    });
-
-    if (tenant?.githubInstallationId) {
-      return {
-        connected: true,
-        installationId: tenant.githubInstallationId,
-        projects: [],
-      };
-    }
-    const projects = await this.prisma.project.findMany({
-      where: {
-        tenantId,
-        githubInstallationId: { not: null },
-      },
-      select: {
-        id: true,
-        name: true,
-        githubRepoUrl: true,
-        githubInstallationId: true,
+    const installations = await this.prisma.gitHubInstallation.findMany({
+      where: { tenantId, status: 'ACTIVE' },
+      include: {
+        repositories: {
+          select: {
+            id: true,
+            owner: true,
+            name: true,
+            fullName: true,
+            projectId: true,
+            webhookActive: true,
+          },
+        },
       },
     });
 
     return {
-      connected: projects.length > 0,
-      installationId: projects[0]?.githubInstallationId || null,
-      projects,
+      connected: installations.length > 0,
+      installations,
     };
   }
 
-  /**
-   * Disconnect GitHub App
-   */
-  async disconnectInstallation(tenantId: string) {
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { githubInstallationId: true },
+  async disconnectInstallation(tenantId: string, installationId: string) {
+    const installation = await this.prisma.gitHubInstallation.findFirst({
+      where: { id: installationId, tenantId },
     });
 
-    await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: {
-        githubInstallationId: null,
-      },
+    if (!installation) {
+      throw new NotFoundException('Installation not found');
+    }
+
+    // Unlink repositories from projects rather than deleting them outright —
+    // preserves the PR/history data those repositories are tied to.
+    await this.prisma.gitHubRepository.updateMany({
+      where: { installationId: installation.id },
+      data: { projectId: null, webhookActive: false },
     });
 
-    await this.prisma.project.updateMany({
-      where: { tenantId },
-      data: {
-        githubInstallationId: null,
-        githubRepoId: null,
-      },
+    await this.prisma.gitHubInstallation.update({
+      where: { id: installation.id },
+      data: { status: 'REMOVED' },
     });
 
     return { message: 'GitHub App disconnected successfully' };
   }
 
-  /**
-   * Handle GitHub App installation events
-   */
+  // Explicit link step: attach an already-synced GitHubRepository to a
+  // Project. This replaces the old "auto-match by URL on install" behavior —
+  // that assumption broke once Project stopped storing a repo URL, and
+  // making it explicit is also just more correct: a repo shouldn't silently
+  // attach itself to whichever project happens to have a matching name.
+  async connectRepositoryToProject(
+    tenantId: string,
+    repositoryId: string,
+    projectId: string,
+  ) {
+    const repository = await this.prisma.gitHubRepository.findFirst({
+      where: { id: repositoryId, tenantId },
+    });
+    if (!repository) throw new NotFoundException('Repository not found');
+
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, tenantId },
+    });
+    if (!project) throw new NotFoundException('Project not found');
+
+    return this.prisma.gitHubRepository.update({
+      where: { id: repositoryId },
+      data: { projectId, webhookActive: true },
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Installation webhook events (repos added/removed from an installation)
+  // ---------------------------------------------------------------------
+
   async handleInstallationEvent(payload: any) {
-    console.log('INSTALLATION PAYLOAD:', JSON.stringify(payload, null, 2));
     const { action, installation, repositories } = payload;
-    const installationId = installation.id.toString();
+    const githubInstallationId = installation.id.toString();
 
     this.logger.log(
-      `Installation event: ${action}, installation_id: ${installationId}`,
+      `Installation event: ${action}, installation_id: ${githubInstallationId}`,
       'GithubService',
     );
 
+    const installationRecord = await this.prisma.gitHubInstallation.findUnique({
+      where: { githubInstallationId },
+    });
+
+    if (!installationRecord) {
+      this.logger.warn(
+        `Received event for unknown installation ${githubInstallationId}`,
+        'GithubService',
+      );
+      return { message: 'Unknown installation, ignored' };
+    }
+
     if (action === 'created' || action === 'added') {
       const repos = repositories || installation.repositories || [];
-      const updatedTenants = new Set<string>();
+      const synced: string[] = [];
 
       for (const repo of repos) {
-        const repoFullName = repo.full_name;
-
-        if (!repoFullName) {
+        if (!repo.full_name) {
           this.logger.warn(
             `Repository missing full_name: ${JSON.stringify(repo)}`,
             'GithubService',
@@ -127,90 +172,46 @@ export class GithubService {
           continue;
         }
 
-        const repoId = repo.id.toString();
-        const repoUrl = `https://github.com/${repoFullName}`;
-
-        this.logger.log(`Processing repo: ${repoUrl}`, 'GithubService');
-
-        const project = await this.prisma.project.findFirst({
-          where: { githubRepoUrl: repoUrl },
+        await this.prisma.gitHubRepository.upsert({
+          where: { githubRepoId: repo.id.toString() },
+          create: {
+            tenantId: installationRecord.tenantId,
+            installationId: installationRecord.id,
+            githubRepoId: repo.id.toString(),
+            githubNodeId: repo.node_id,
+            owner: repo.full_name.split('/')[0],
+            name: repo.name,
+            fullName: repo.full_name,
+            isPrivate: !!repo.private,
+            defaultBranch: repo.default_branch,
+          },
+          update: {
+            fullName: repo.full_name,
+            isPrivate: !!repo.private,
+            defaultBranch: repo.default_branch,
+          },
         });
 
-        if (project) {
-          // Update project with installation
-          await this.prisma.project.update({
-            where: { id: project.id },
-            data: {
-              githubInstallationId: installationId,
-              githubRepoId: repoId,
-            },
-          });
-
-          // Update only this tenant (multi-tenant safe)
-          await this.prisma.tenant.update({
-            where: { id: project.tenantId },
-            data: { githubInstallationId: installationId },
-          });
-
-          updatedTenants.add(project.tenantId);
-
-          this.logger.log(
-            `Updated project ${project.name} (tenant: ${project.tenantId}) with installation`,
-            'GithubService',
-          );
-        } else {
-          this.logger.warn(
-            `No project found for repo: ${repoUrl}`,
-            'GithubService',
-          );
-        }
+        synced.push(repo.full_name);
+        this.logger.log(`Synced repo: ${repo.full_name}`, 'GithubService');
       }
 
-      return {
-        message: 'Installation processed successfully',
-        tenantsUpdated: Array.from(updatedTenants),
-      };
+      return { message: 'Repositories synced', synced };
     }
 
     if (action === 'deleted') {
-      // Find all projects with this installation
-      const projectsWithInstallation = await this.prisma.project.findMany({
-        where: { githubInstallationId: installationId },
-        select: { id: true, tenantId: true },
+      await this.prisma.gitHubInstallation.update({
+        where: { id: installationRecord.id },
+        data: { status: 'REMOVED' },
       });
 
-      // Collect affected tenants
-      const affectedTenantIds = new Set(
-        projectsWithInstallation.map((p) => p.tenantId),
-      );
-
-      // Update projects
-      await this.prisma.project.updateMany({
-        where: { githubInstallationId: installationId },
-        data: {
-          githubInstallationId: null,
-          githubRepoId: null,
-        },
+      await this.prisma.gitHubRepository.updateMany({
+        where: { installationId: installationRecord.id },
+        data: { projectId: null, webhookActive: false },
       });
-
-      if (projectsWithInstallation.length === 0) {
-        this.logger.warn(
-          `No projects found with installation ${installationId}`,
-          'GithubService',
-        );
-        return { message: 'Installation removed successfully' };
-      }
-
-      // Update only affected tenants (multi-tenant safe)
-      for (const tenantId of affectedTenantIds) {
-        await this.prisma.tenant.update({
-          where: { id: tenantId },
-          data: { githubInstallationId: null },
-        });
-      }
 
       this.logger.log(
-        `Installation ${installationId} removed from ${affectedTenantIds.size} tenant(s)`,
+        `Installation ${githubInstallationId} removed`,
         'GithubService',
       );
 
@@ -220,96 +221,166 @@ export class GithubService {
     return { message: `Installation event ${action} processed` };
   }
 
-  async handleWebhook(payload: GitHubWebhookDto) {
+  // ---------------------------------------------------------------------
+  // PR webhook handling — now idempotent via WebhookEvent
+  // ---------------------------------------------------------------------
+
+  async handleWebhook(
+    deliveryId: string,
+    eventType: string,
+    payload: GitHubWebhookDto,
+  ) {
+    // Idempotency guard: GitHub retries webhook deliveries on timeout/error.
+    // A previously-processed delivery is skipped entirely rather than
+    // silently reprocessed (which could double-log activity or re-fire a
+    // feature status transition).
+    const existingEvent = await this.prisma.webhookEvent.findUnique({
+      where: { deliveryId },
+    });
+
+    if (existingEvent) {
+      if (existingEvent.status === 'PROCESSED') {
+        return { message: 'Duplicate delivery, already processed' };
+      }
+      // A prior attempt exists but didn't finish (FAILED/RECEIVED) — fall
+      // through and retry rather than skip.
+    }
+
     const { action, pull_request, repository } = payload;
 
     if (!pull_request || !repository) {
       throw new BadRequestException('Invalid webhook payload');
     }
 
-    const project = await this.prisma.project.findFirst({
-      where: { githubRepoId: repository.id.toString() },
-      include: { tenant: true },
+    const webhookEvent = await this.prisma.webhookEvent.upsert({
+      where: { deliveryId },
+      create: {
+        deliveryId,
+        eventType,
+        action,
+        status: 'PROCESSING',
+        payload: payload as any,
+      },
+      update: { status: 'PROCESSING', attempts: { increment: 1 } },
     });
 
-    if (!project) {
+    const repoRecord = await this.prisma.gitHubRepository.findUnique({
+      where: { githubRepoId: repository.id.toString() },
+    });
+
+    if (!repoRecord || !repoRecord.projectId) {
+      await this.prisma.webhookEvent.update({
+        where: { id: webhookEvent.id },
+        data: { status: 'IGNORED', processedAt: new Date() },
+      });
       this.logger.warn(
-        `No Project found for repo: ${repository.full_name}`,
+        `No project linked for repo: ${repository.full_name}`,
         'GithubService',
       );
       return { message: 'Repository not linked to any project' };
     }
 
-    const tenantId = project.tenantId;
+    const tenantId = repoRecord.tenantId;
 
-    const featureId = await this.extractFeatureId(
-      tenantId,
-      pull_request.head.ref,
-      pull_request.body,
-    );
+    try {
+      const featureId = await this.extractFeatureId(
+        tenantId,
+        pull_request.head.ref,
+        pull_request.body,
+      );
 
-    this.logger.log(
-      `Webhook: ${action} PR #${pull_request.number} in ${repository.full_name}`,
-      'GithubService',
-    );
+      this.logger.log(
+        `Webhook: ${action} PR #${pull_request.number} in ${repository.full_name}`,
+        'GithubService',
+      );
 
-    switch (action) {
-      case 'opened':
-        return this.handlePROpened(
-          tenantId,
-          pull_request,
-          repository,
-          featureId,
-        );
-      case 'closed':
-        return this.handlePRClosed(tenantId, pull_request, featureId);
-      case 'reopened':
-        return this.handlePRReopened(tenantId, pull_request, featureId);
-      case 'synchronize':
-        return this.handlePRSynchronize(tenantId, pull_request);
-      default:
-        return { message: `Unhandled action: ${action}` };
+      let result: { message: string; pullRequestId?: string };
+
+      switch (action) {
+        case 'opened':
+          result = await this.handlePROpened(
+            tenantId,
+            repoRecord.id,
+            pull_request,
+            featureId,
+          );
+          break;
+        case 'closed':
+          result = await this.handlePRClosed(tenantId, pull_request, featureId);
+          break;
+        case 'reopened':
+          result = await this.handlePRReopened(tenantId, pull_request);
+          break;
+        case 'synchronize':
+          result = await this.handlePRSynchronize(tenantId, pull_request);
+          break;
+        default:
+          result = { message: `Unhandled action: ${action}` };
+      }
+
+      await this.prisma.webhookEvent.update({
+        where: { id: webhookEvent.id },
+        data: {
+          status: 'PROCESSED',
+          processedAt: new Date(),
+          repositoryId: repoRecord.id,
+          pullRequestId: result.pullRequestId,
+        },
+      });
+
+      return result;
+    } catch (error) {
+      await this.prisma.webhookEvent.update({
+        where: { id: webhookEvent.id },
+        data: {
+          status: 'FAILED',
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      throw error;
     }
   }
 
-  /**
-   * Handle PR opened - WITH TRANSACTION
-   */
   private async handlePROpened(
     tenantId: string,
+    repositoryId: string,
     pr: any,
-    repo: any,
     featureId: string | null,
   ) {
-    const existingPr = await this.prisma.pullRequest.findFirst({
-      where: {
-        tenantId,
-        githubPrId: pr.id.toString(),
-      },
+    const existingPr = await this.prisma.pullRequest.findUnique({
+      where: { githubNodeId: pr.node_id },
     });
 
     if (existingPr) {
       return { message: 'PR already exists', pullRequestId: existingPr.id };
     }
 
-    // Use transaction to ensure atomicity
-    const result = await this.prisma.$transaction(async (tx) => {
-      // Create PR
+    return this.prisma.$transaction(async (tx) => {
       const pullRequest = await tx.pullRequest.create({
         data: {
           tenantId,
-          githubPrId: pr.id.toString(),
+          repositoryId,
+          githubNodeId: pr.node_id,
+          githubDatabaseId: pr.id.toString(),
+          githubPrNumber: pr.number,
           githubPrUrl: pr.html_url,
           title: pr.title,
           description: pr.body,
+          branchName: pr.head.ref,
+          baseBranch: pr.base?.ref,
+          headBranch: pr.head.ref,
           author: pr.user.login,
+          authorGithubLogin: pr.user.login,
+          isDraft: !!pr.draft,
           status: 'OPEN',
+          source: 'GITHUB',
           featureId: featureId ?? undefined,
-          createdAt: new Date(pr.created_at),
+          linkSource: featureId ? 'AUTO_BRANCH' : undefined,
+          linkedAt: featureId ? new Date() : undefined,
+          githubCreatedAt: new Date(pr.created_at),
         },
       });
 
-      // Update feature status if linked
       if (featureId) {
         const feature = await tx.feature.findFirst({
           where: { tenantId, id: featureId },
@@ -321,12 +392,12 @@ export class GithubService {
             data: { status: 'IN_PROGRESS' },
           });
 
-          // Log activity
           await tx.activityLog.create({
             data: {
               tenantId,
               featureId,
-              userId: feature.createdById,
+              actorType: 'GITHUB',
+              actorName: pr.user.login,
               action: 'FEATURE_STATUS_UPDATED_BY_PR',
               metadata: {
                 status: 'IN_PROGRESS',
@@ -334,6 +405,7 @@ export class GithubService {
                 prId: pullRequest.id,
                 prUrl: pr.html_url,
               },
+              pullRequestId: pullRequest.id,
             },
           });
         }
@@ -345,23 +417,15 @@ export class GithubService {
         linkedToFeature: !!featureId,
       };
     });
-
-    return result;
   }
 
-  /**
-   * Handle PR closed - WITH TRANSACTION
-   */
   private async handlePRClosed(
     tenantId: string,
     pr: any,
     featureId: string | null,
   ) {
-    const pullRequest = await this.prisma.pullRequest.findFirst({
-      where: {
-        tenantId,
-        githubPrId: pr.id.toString(),
-      },
+    const pullRequest = await this.prisma.pullRequest.findUnique({
+      where: { githubNodeId: pr.node_id },
     });
 
     if (!pullRequest) {
@@ -370,18 +434,20 @@ export class GithubService {
 
     const status = pr.merged ? 'MERGED' : 'CLOSED';
 
-    // Use transaction
-    const result = await this.prisma.$transaction(async (tx) => {
-      // Update PR status
+    return this.prisma.$transaction(async (tx) => {
       await tx.pullRequest.update({
         where: { id: pullRequest.id },
         data: {
           status,
           mergedAt: pr.merged_at ? new Date(pr.merged_at) : null,
+          closedAt: pr.closed_at ? new Date(pr.closed_at) : null,
         },
       });
 
-      // Update feature status if PR was merged
+      // Rule: a merged PR advances its linked FEATURE to IN_REVIEW.
+      // Resolving a linked BUG on merge is separate (Phase-3 follow-up, not
+      // wired here yet) — keeping these independent avoids the "different
+      // bug on the same feature gets closed" problem flagged earlier.
       if (pr.merged && pullRequest.featureId) {
         const feature = await tx.feature.findFirst({
           where: { tenantId, id: pullRequest.featureId },
@@ -393,12 +459,12 @@ export class GithubService {
             data: { status: 'IN_REVIEW' },
           });
 
-          // Log activity
           await tx.activityLog.create({
             data: {
               tenantId,
               featureId: pullRequest.featureId,
-              userId: feature.createdById,
+              actorType: 'GITHUB',
+              actorName: pr.user?.login,
               action: 'FEATURE_STATUS_UPDATED_BY_PR',
               metadata: {
                 status: 'IN_REVIEW',
@@ -407,6 +473,7 @@ export class GithubService {
                 prUrl: pr.html_url,
                 merged: true,
               },
+              pullRequestId: pullRequest.id,
             },
           });
         }
@@ -417,34 +484,21 @@ export class GithubService {
         pullRequestId: pullRequest.id,
       };
     });
-
-    return result;
   }
 
-  /**
-   * Handle PR reopened - WITH TRANSACTION
-   */
-  private async handlePRReopened(
-    tenantId: string,
-    pr: any,
-    featureId: string | null,
-  ) {
-    const pullRequest = await this.prisma.pullRequest.findFirst({
-      where: {
-        tenantId,
-        githubPrId: pr.id.toString(),
-      },
+  private async handlePRReopened(tenantId: string, pr: any) {
+    const pullRequest = await this.prisma.pullRequest.findUnique({
+      where: { githubNodeId: pr.node_id },
     });
 
     if (!pullRequest) {
       throw new NotFoundException('PR not found');
     }
 
-    // Use transaction
-    const result = await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       await tx.pullRequest.update({
         where: { id: pullRequest.id },
-        data: { status: 'OPEN' },
+        data: { status: 'OPEN', closedAt: null, mergedAt: null },
       });
 
       if (pullRequest.featureId) {
@@ -462,7 +516,8 @@ export class GithubService {
             data: {
               tenantId,
               featureId: pullRequest.featureId,
-              userId: feature.createdById,
+              actorType: 'GITHUB',
+              actorName: pr.user?.login,
               action: 'FEATURE_STATUS_UPDATED_BY_PR',
               metadata: {
                 status: 'IN_PROGRESS',
@@ -471,29 +526,19 @@ export class GithubService {
                 prUrl: pr.html_url,
                 reopened: true,
               },
+              pullRequestId: pullRequest.id,
             },
           });
         }
       }
 
-      return {
-        message: 'PR reopened',
-        pullRequestId: pullRequest.id,
-      };
+      return { message: 'PR reopened', pullRequestId: pullRequest.id };
     });
-
-    return result;
   }
 
-  /**
-   * Handle PR synchronize (no transaction needed - single update)
-   */
   private async handlePRSynchronize(tenantId: string, pr: any) {
-    const pullRequest = await this.prisma.pullRequest.findFirst({
-      where: {
-        tenantId,
-        githubPrId: pr.id.toString(),
-      },
+    const pullRequest = await this.prisma.pullRequest.findUnique({
+      where: { githubNodeId: pr.node_id },
     });
 
     if (!pullRequest) {
@@ -505,49 +550,44 @@ export class GithubService {
       data: {
         title: pr.title,
         description: pr.body,
-        updatedAt: new Date(pr.updated_at),
       },
     });
 
     return { message: 'PR updated', pullRequestId: pullRequest.id };
   }
 
-  /**
-   * Extract feature ID from branch name or PR body
-   * Handles both feature/ and bug/ branches
-   */
+  // ---------------------------------------------------------------------
+  // Branch/body → feature or bug resolution (logic unchanged from before —
+  // only the DB calls needed to move; the matching strategy was already
+  // solid)
+  // ---------------------------------------------------------------------
+
   private async extractFeatureId(
     tenantId: string,
     branchName: string,
     prBody: string | null,
   ): Promise<string | null> {
-    // Check for bug/ pattern first
     const bugMatch = branchName.match(/bug[\\/\-]([a-f0-9-]{36})/i);
     if (bugMatch) {
       const bugId = bugMatch[1];
-      this.logger.log(`Detected bug branch: ${bugId}`, 'GithubService');
-
       const bug = await this.prisma.bugReport.findFirst({
         where: { id: bugId, tenantId },
         select: { featureId: true },
       });
-
       if (bug?.featureId) {
         this.logger.log(
           `Bug ${bugId} linked to feature ${bug.featureId}`,
           'GithubService',
         );
         return bug.featureId;
-      } else {
-        this.logger.warn(
-          `Bug ${bugId} not found or not linked to feature`,
-          'GithubService',
-        );
-        return null;
       }
+      this.logger.warn(
+        `Bug ${bugId} not found or not linked to feature`,
+        'GithubService',
+      );
+      return null;
     }
 
-    // Check for feature/ pattern
     const featurePatterns = [
       /feature[\\/\-]([a-f0-9-]{36})/i,
       /feat[\\/\-]([a-f0-9-]{36})/i,
@@ -564,41 +604,22 @@ export class GithubService {
       }
     }
 
-    // Check PR body for keywords
     if (prBody) {
       const bugBodyMatch = prBody.match(/bug:\s*#?([a-f0-9-]{36})/i);
-
       if (bugBodyMatch) {
         const bugId = bugBodyMatch[1];
         const bug = await this.prisma.bugReport.findFirst({
           where: { id: bugId, tenantId },
           select: { featureId: true },
         });
-        if (bug?.featureId) {
-          this.logger.log(
-            `PR body references bug ${bugId} linked to feature ${bug.featureId}`,
-            'GithubService',
-          );
-          return bug.featureId;
-        }
-        this.logger.warn(
-          `Bug ${bugId} not found or not linked to feature`,
-          'GithubService',
-        );
-        return null;
+        return bug?.featureId ?? null;
       }
 
-      // Check for explicit feature reference
       const featureBodyMatch = prBody.match(/feature:\s*#?([a-f0-9-]{36})/i);
       if (featureBodyMatch) {
-        this.logger.log(
-          `PR body references feature ${featureBodyMatch[1]}`,
-          'GithubService',
-        );
         return featureBodyMatch[1] ?? null;
       }
 
-      // Check for generic closes/fixes - try bug first, then assume feature
       const genericPatterns = [
         /closes\s+#([a-f0-9-]{36})/i,
         /fixes\s+#([a-f0-9-]{36})/i,
@@ -611,123 +632,100 @@ export class GithubService {
             where: { id, tenantId },
             select: { featureId: true },
           });
-          if (bug?.featureId) {
-            this.logger.log(
-              `PR body references bug ${id} linked to feature ${bug.featureId}`,
-              'GithubService',
-            );
-            return bug.featureId;
-          }
-          this.logger.log(`PR body references feature ${id}`, 'GithubService');
-          return id;
+          return bug?.featureId ?? id;
         }
       }
     }
-    this.logger.log(`No feature ID detected`, 'GithubService');
+
+    this.logger.log('No feature ID detected', 'GithubService');
     return null;
   }
 
-  /**
-   * Manually link PR to feature - WITH TRANSACTION
-   */
+  // ---------------------------------------------------------------------
+  // Manual link/unlink — now attributed to the acting member, not the
+  // feature's original creator (that was a bug: the old code logged
+  // feature.createdById as the actor regardless of who actually clicked
+  // "link").
+  // ---------------------------------------------------------------------
+
   async linkPRToFeature(
     tenantId: string,
+    memberId: string,
     pullRequestId: string,
     featureId: string,
   ) {
-    const result = await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       const pr = await tx.pullRequest.findFirst({
         where: { tenantId, id: pullRequestId },
       });
-
-      if (!pr) {
-        throw new NotFoundException('Pull request not found');
-      }
+      if (!pr) throw new NotFoundException('Pull request not found');
 
       const feature = await tx.feature.findFirst({
         where: { id: featureId, tenantId },
       });
-
-      if (!feature) {
-        throw new NotFoundException('Feature not found');
-      }
+      if (!feature) throw new NotFoundException('Feature not found');
 
       await tx.pullRequest.update({
         where: { id: pullRequestId },
-        data: { featureId },
+        data: { featureId, linkSource: 'MANUAL', linkedAt: new Date() },
       });
 
-      // Log activity
       await tx.activityLog.create({
         data: {
           tenantId,
           featureId,
-          userId: feature.createdById,
+          memberId,
+          actorType: 'USER',
           action: 'PR_MANUALLY_LINKED',
-          metadata: {
-            prId: pullRequestId,
-            prUrl: pr.githubPrUrl,
-          },
+          metadata: { prId: pullRequestId, prUrl: pr.githubPrUrl },
+          pullRequestId,
         },
       });
 
       return { message: 'PR linked to feature successfully' };
     });
-
-    return result;
   }
 
-  /**
-   * Unlink PR from feature - WITH TRANSACTION
-   */
-  async unlinkPRFromFeature(tenantId: string, pullRequestId: string) {
-    const result = await this.prisma.$transaction(async (tx) => {
+  async unlinkPRFromFeature(
+    tenantId: string,
+    memberId: string,
+    pullRequestId: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
       const pr = await tx.pullRequest.findFirst({
         where: { id: pullRequestId, tenantId },
       });
-
-      if (!pr) {
-        throw new NotFoundException('Pull request not found');
-      }
+      if (!pr) throw new NotFoundException('Pull request not found');
 
       const oldFeatureId = pr.featureId;
 
       await tx.pullRequest.update({
         where: { id: pullRequestId },
-        data: { featureId: null },
+        data: { featureId: null, linkSource: null, linkedAt: null },
       });
 
-      // Log activity if was linked
       if (oldFeatureId) {
-        const feature = await tx.feature.findFirst({
-          where: { id: oldFeatureId, tenantId },
+        await tx.activityLog.create({
+          data: {
+            tenantId,
+            featureId: oldFeatureId,
+            memberId,
+            actorType: 'USER',
+            action: 'PR_MANUALLY_UNLINKED',
+            metadata: { prId: pullRequestId, prUrl: pr.githubPrUrl },
+            pullRequestId,
+          },
         });
-
-        if (feature) {
-          await tx.activityLog.create({
-            data: {
-              tenantId,
-              featureId: oldFeatureId,
-              userId: feature.createdById,
-              action: 'PR_MANUALLY_UNLINKED',
-              metadata: {
-                prId: pullRequestId,
-                prUrl: pr.githubPrUrl,
-              },
-            },
-          });
-        }
       }
 
       return { message: 'PR unlinked from feature successfully' };
     });
-
-    return result;
   }
 
-  /**
-   * List all PRs for a tenant
-   */
+  // ---------------------------------------------------------------------
+  // Read endpoints
+  // ---------------------------------------------------------------------
+
   async listPullRequests(tenantId: string, featureId?: string | null) {
     return this.prisma.pullRequest.findMany({
       where: {
@@ -735,21 +733,13 @@ export class GithubService {
         ...(featureId && { featureId }),
       },
       include: {
-        feature: {
-          select: {
-            id: true,
-            title: true,
-            status: true,
-          },
-        },
+        feature: { select: { id: true, title: true, status: true } },
+        repository: { select: { id: true, fullName: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  /**
-   * Get PR details
-   */
   async getPullRequest(tenantId: string, id: string) {
     const pr = await this.prisma.pullRequest.findFirst({
       where: { id, tenantId },
@@ -759,11 +749,10 @@ export class GithubService {
             id: true,
             title: true,
             status: true,
-            project: {
-              select: { id: true, name: true },
-            },
+            project: { select: { id: true, name: true } },
           },
         },
+        repository: { select: { id: true, fullName: true } },
       },
     });
 
