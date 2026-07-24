@@ -7,13 +7,16 @@ import type { UpdateProjectDto } from './dto/update-project.dto';
 export class ProjectsService {
   constructor(private prisma: PrismaService) {}
 
+   // NOTE: githubRepoUrl removed here. Repo linkage now lives on the
+    // GitHubRepository model (Phase 3), connected via GitHubRepository.projectId,
+    // not stored directly on Project. Revisit once the GitHub module is rebuilt.
+
   async create(tenantId: string, dto: CreateProjectDto) {
     return this.prisma.project.create({
       data: {
         tenantId,
         name: dto.name,
         description: dto.description,
-        githubRepoUrl: dto.githubRepoUrl,
       },
     });
   }
@@ -39,7 +42,7 @@ export class ProjectsService {
       include: {
         members: {
           include: {
-            user: {
+            member: {
               select: { id: true, name: true, email: true, role: true },
             },
           },
@@ -82,7 +85,7 @@ export class ProjectsService {
     return { message: 'Project deleted successfully' };
   }
 
-  async addMember(tenantId: string, projectId: string, userId: string) {
+  async addMember(tenantId: string, projectId: string, memberId: string) {
     const project = await this.prisma.project.findFirst({
       where: { id: projectId, tenantId },
     });
@@ -91,13 +94,13 @@ export class ProjectsService {
       throw new NotFoundException('Project not found');
     }
 
-    const user = await this.prisma.user.findFirst({
-      where: { id: userId, tenantId },
+    const member = await this.prisma.workspaceMember.findFirst({
+      where: { id: memberId, tenantId },
     });
 
-    if (!user) throw new NotFoundException('User not found');
+    if (!member) throw new NotFoundException('User not found');
     const existingMember = await this.prisma.projectMember.findFirst({
-      where: { projectId, userId },
+      where: { projectId, memberId },
     });
 
     if (existingMember) {
@@ -107,18 +110,18 @@ export class ProjectsService {
     return this.prisma.projectMember.create({
       data: {
         projectId,
-        userId,
-        role: user.role,
+        memberId,
+        tenantId
       },
       include: {
-        user: {
+        member: {
           select: { id: true, name: true, email: true, role: true },
         },
       },
     });
   }
 
-  async removeMember(tenantId: string, projectId: string, userId: string) {
+  async removeMember(tenantId: string, projectId: string, memberId: string) {
     const project = await this.prisma.project.findFirst({
       where: { id: projectId, tenantId },
     });
@@ -126,7 +129,7 @@ export class ProjectsService {
     if (!project) throw new NotFoundException('Project not found');
 
     const member = await this.prisma.projectMember.findFirst({
-      where: { projectId, userId },
+      where: { projectId, memberId },
     });
 
     if (!member) {

@@ -30,7 +30,7 @@ export class CommentsController {
   ) {
     return this.commentsService.create(
       req.tenantId,
-      req.user.userId,
+      req.user.memberId,
       createCommentDto,
     );
   }
@@ -64,7 +64,7 @@ export class CommentsController {
     return this.commentsService.update(
       req.tenantId,
       id,
-      req.user.userId,
+      req.user.memberId,
       req.user.role,
       updateCommentDto,
     );
@@ -75,7 +75,7 @@ export class CommentsController {
     return this.commentsService.remove(
       req.tenantId,
       id,
-      req.user.userId,
+      req.user.memberId,
       req.user.role,
     );
   }

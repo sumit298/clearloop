@@ -32,12 +32,6 @@ export class AuthController {
     return this.authService.loginByEmail(dto);
   }
 
-  // Legacy endpoint - keep for backward compatibility
-  @Post('login/:slug')
-  loginBySlug(@Param('slug') slug: string, @Body() dto: LoginDto) {
-    return this.authService.login(dto, slug);
-  }
-
   // Google OAuth
   @Get('google')
   @UseGuards(GoogleAuthGuard)

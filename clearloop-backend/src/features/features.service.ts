@@ -13,7 +13,7 @@ import type {
 export class FeaturesService {
   constructor(private prisma: PrismaService) {}
 
-  async create(tenantId: string, userId: string, dto: CreateFeatureDto) {
+  async create(tenantId: string, memberId: string, dto: CreateFeatureDto) {
     const project = await this.prisma.project.findFirst({
       where: { id: dto.projectId, tenantId },
     });
@@ -21,7 +21,7 @@ export class FeaturesService {
     if (!project) throw new NotFoundException('Project not found');
 
     if (dto.assignedToId) {
-      const assignee = await this.prisma.user.findFirst({
+      const assignee = await this.prisma.workspaceMember.findFirst({
         where: {
           id: dto.assignedToId,
           tenantId,
@@ -34,7 +34,7 @@ export class FeaturesService {
       data: {
         ...dto,
         tenantId,
-        createdById: userId,
+        createdById: memberId,
         status: 'PLANNED',
         priority: dto.priority || 'MEDIUM',
       },
@@ -48,7 +48,7 @@ export class FeaturesService {
       data: {
         tenantId,
         featureId: feature.id,
-        userId,
+        memberId,
         action: 'FEATURE_CREATED',
         metadata: { title: feature.title },
       },
@@ -106,13 +106,13 @@ export class FeaturesService {
         },
         comments: {
           include: {
-            user: { select: { id: true, name: true, email: true } },
+            member: { select: { id: true, name: true, email: true } },
           },
           orderBy: { createdAt: 'desc' },
         },
         activityLogs: {
           include: {
-            user: { select: { id: true, name: true, email: true } },
+            member: { select: { id: true, name: true, email: true } },
           },
           orderBy: { createdAt: 'desc' },
           take: 20,
@@ -123,7 +123,7 @@ export class FeaturesService {
     if (!feature) throw new NotFoundException('Feature not found');
     return feature;
   }
-  async update(tenantId: string, userId: string, id: string, dto: UpdateFeatureDto){
+  async update(tenantId: string, memberId: string, id: string, dto: UpdateFeatureDto){
     const existing = await this.prisma.feature.findFirst({
       where: {id, tenantId},
     })
@@ -133,7 +133,7 @@ export class FeaturesService {
     }
 
     if(dto.assignedToId){
-      const assignee = await this.prisma.user.findFirst({
+      const assignee = await this.prisma.workspaceMember.findFirst({
         where: { id: dto.assignedToId, tenantId}
       })
 
@@ -154,7 +154,7 @@ export class FeaturesService {
       data: {
         tenantId,
         featureId: feature.id,
-        userId,
+        memberId,
         action: 'FEATURE_UPDATED',
         metadata: JSON.parse(JSON.stringify(dto))
 
@@ -163,7 +163,7 @@ export class FeaturesService {
     return feature;
   }
 
-  async remove(tenantId: string, userId: string, id: string){
+  async remove(tenantId: string, memberId: string, id: string){
     const existing = await this.prisma.feature.findFirst({
       where: { id, tenantId},
     })
@@ -174,7 +174,7 @@ export class FeaturesService {
       data: {
         tenantId,
         featureId: id,
-        userId,
+        memberId,
         action: 'FEATURE_DELETED',
         metadata: { title: existing.title },
       },

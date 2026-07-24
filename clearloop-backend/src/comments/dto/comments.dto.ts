@@ -12,6 +12,8 @@ export class CreateCommentsDto {
   @IsUUID()
   @IsOptional()
   bugReportId?: string;
+
+
 }
 
 export class UpdateCommentsDto {

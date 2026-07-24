@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCommentsDto, UpdateCommentsDto } from './dto/comments.dto';
 
@@ -6,7 +10,7 @@ import { CreateCommentsDto, UpdateCommentsDto } from './dto/comments.dto';
 export class CommentsService {
   constructor(private prisma: PrismaService) {}
 
-  async create(tenantId: string, userId: string, dto: CreateCommentsDto) {
+  async create(tenantId: string, memberId: string, dto: CreateCommentsDto) {
     // Must have either featureId or bugReportId
     if (!dto.featureId && !dto.bugReportId) {
       throw new ForbiddenException(
@@ -37,13 +41,13 @@ export class CommentsService {
     return this.prisma.comment.create({
       data: {
         tenantId,
-        userId,
+        memberId,
         content: dto.content,
         featureId: dto.featureId,
         bugReportId: dto.bugReportId,
       },
       include: {
-        user: {
+        member: {
           select: {
             id: true,
             name: true,
@@ -61,7 +65,7 @@ export class CommentsService {
         featureId,
       },
       include: {
-        user: {
+        member: {
           select: {
             id: true,
             name: true,
@@ -80,7 +84,7 @@ export class CommentsService {
         bugReportId,
       },
       include: {
-        user: {
+        member: {
           select: {
             id: true,
             name: true,
@@ -96,7 +100,7 @@ export class CommentsService {
     const comment = await this.prisma.comment.findFirst({
       where: { id, tenantId },
       include: {
-        user: {
+        member: {
           select: {
             id: true,
             name: true,
@@ -122,8 +126,8 @@ export class CommentsService {
   async update(
     tenantId: string,
     id: string,
-    userId: string,
-    userRole: string,  // ADD THIS PARAMETER
+    memberId: string,
+    userRole: string, // ADD THIS PARAMETER
     dto: UpdateCommentsDto,
   ) {
     const comment = await this.prisma.comment.findFirst({
@@ -135,7 +139,7 @@ export class CommentsService {
     }
 
     // Only comment owner or ADMIN can update
-    if (comment.userId !== userId && userRole !== 'ADMIN') {
+    if (comment.memberId !== memberId && userRole !== 'ADMIN') {
       throw new ForbiddenException('You can only edit your own comments');
     }
 
@@ -143,7 +147,7 @@ export class CommentsService {
       where: { id },
       data: { content: dto.content },
       include: {
-        user: {
+        member: {
           select: {
             id: true,
             name: true,
@@ -154,7 +158,12 @@ export class CommentsService {
     });
   }
 
-  async remove(tenantId: string, id: string, userId: string, userRole: string) {
+  async remove(
+    tenantId: string,
+    id: string,
+    memberId: string,
+    userRole: string,
+  ) {
     const comment = await this.prisma.comment.findFirst({
       where: { id, tenantId },
     });
@@ -165,7 +174,7 @@ export class CommentsService {
 
     // Only comment owner, ADMIN, or MANAGER can delete
     if (
-      comment.userId !== userId &&
+      comment.memberId !== memberId &&
       userRole !== 'ADMIN' &&
       userRole !== 'MANAGER'
     ) {
