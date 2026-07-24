@@ -34,7 +34,7 @@ export class ReleasesController {
   ) {
     return this.releasesService.create(
       req.tenantId,
-      req.user.userId,
+      req.user.memberId,
       createReleaseDto,
     );
   }

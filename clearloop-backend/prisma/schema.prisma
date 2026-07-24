@@ -1,237 +1,64 @@
+// =============================================================================
+// ClearLoop production-oriented schema
+// =============================================================================
+//
+// Goals of this schema:
+// 1. Support real multi-workspace identity.
+//    - User = global identity/login.
+//    - WorkspaceMember = membership + role inside one tenant/workspace.
+//
+// 2. Model GitHub properly.
+//    - GitHubInstallation = GitHub App installation.
+//    - GitHubRepository = repository connected through installation.
+//    - PullRequest = stable GitHub PR identity, repository context, links.
+//    - WebhookEvent = idempotent webhook processing and debugging.
+//
+// 3. Model engineering workflow properly.
+//    - Feature and BugReport can have human-friendly keys.
+//    - PullRequest can link to Feature and/or BugReport.
+//    - BugReport can be resolved by a specific PullRequest.
+//    - Release can include features and bugs.
+//
+// 4. Make automation auditable.
+//    - ActivityLog supports user/system/GitHub actors.
+//    - ActivityLog can reference feature, bug, PR, release, project.
+//
+// 5. Improve security/auth.
+//    - RefreshToken, LoginSession, PasswordResetToken, EmailVerificationToken.
+//    - Invitation stores tokenHash, not raw token.
+//
+// 6. Add tenant-scoped indexes and unique constraints.
+//    - Most tenant-owned tables include @@unique([tenantId, id]) so you can
+//      later use composite foreign keys like (tenantId, projectId) if desired.
+//
+// Raw SQL you should add in migrations:
+// 1. Only one active pending invitation per workspace/email.
+// 2. Comment must belong to exactly one target: feature OR bug report.
+// =============================================================================
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
+  provider = "postgresql"
+
+  // Use this for normal queries. Can point to PgBouncer/Supabase pooler.
+  url = env("DATABASE_URL")
+
+  // Used by Prisma Migrate. Should point directly to Postgres, not a pooler.
   directUrl = env("DIRECT_URL")
 }
 
-model Tenant {
-  id                   String        @id @default(uuid())
-  name                 String
-  slug                 String        @unique
-  plan                 TenantPlan    @default(FREE)
-  githubInstallationId String?
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
-  activityLogs         ActivityLog[]
-  bugReports           BugReport[]
-  comments             Comment[]
-  features             Feature[]
-  invitations          Invitation[]
-  projects             Project[]
-  pullRequests         PullRequest[]
-  releases             Release[]
-  users                User[]
-
-  @@map("tenants")
-}
-
-model User {
-  id               String          @id @default(uuid())
-  tenantId         String
-  email            String
-  name             String
-  role             UserRole        @default(DEVELOPER)
-  designation      String?
-  githubUsername   String?
-  avatarUrl        String?
-  isActive         Boolean         @default(true)
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  password         String?
-  githubId         String?         @unique
-  googleId         String?         @unique
-  invitedAt        DateTime?
-  invitedBy        String?
-  oauthProvider    String?
-  activityLogs     ActivityLog[]
-  bugReports       BugReport[]
-  comments         Comment[]
-  assignedFeatures Feature[]       @relation("FeatureAssignee")
-  createdFeatures  Feature[]       @relation("FeatureCreator")
-  projectMembers   ProjectMember[]
-  tenant           Tenant          @relation(fields: [tenantId], references: [id])
-
-  @@unique([tenantId, email])
-  @@map("users")
-}
-
-model Invitation {
-  id         String    @id @default(uuid())
-  tenantId   String
-  email      String
-  role       UserRole  @default(DEVELOPER)
-  token      String    @unique
-  invitedBy  String?
-  expiresAt  DateTime?
-  acceptedAt DateTime?
-  createdAt  DateTime  @default(now())
-  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@unique([tenantId, email])
-  @@map("invitations")
-}
-
-model Project {
-  id                   String          @id @default(uuid())
-  tenantId             String
-  name                 String
-  description          String?
-  githubRepoUrl        String?
-  githubRepoId         String?
-  githubInstallationId String?
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @updatedAt
-  features             Feature[]
-  members              ProjectMember[]
-  tenant               Tenant          @relation(fields: [tenantId], references: [id])
-
-  @@map("projects")
-}
-
-model ProjectMember {
-  id        String   @id @default(uuid())
-  projectId String
-  userId    String
-  createdAt DateTime @default(now())
-  role      UserRole @default(DEVELOPER)
-  project   Project  @relation(fields: [projectId], references: [id])
-  user      User     @relation(fields: [userId], references: [id])
-
-  @@unique([projectId, userId])
-  @@map("project_members")
-}
-
-model Feature {
-  id           String           @id @default(uuid())
-  tenantId     String
-  projectId    String
-  title        String
-  description  String?
-  reason       String?
-  status       FeatureStatus    @default(PLANNED)
-  priority     FeaturePriority  @default(MEDIUM)
-  createdById  String
-  assignedToId String?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  activityLogs ActivityLog[]
-  bugReports   BugReport[]
-  comments     Comment[]
-  assignedTo   User?            @relation("FeatureAssignee", fields: [assignedToId], references: [id])
-  createdBy    User             @relation("FeatureCreator", fields: [createdById], references: [id])
-  project      Project          @relation(fields: [projectId], references: [id])
-  tenant       Tenant           @relation(fields: [tenantId], references: [id])
-  pullRequests PullRequest[]
-  releases     ReleaseFeature[]
-
-  @@map("features")
-}
-
-model PullRequest {
-  id          String            @id @default(uuid())
-  tenantId    String
-  featureId   String?
-  title       String
-  description String?
-  status      PullRequestStatus @default(OPEN)
-  githubPrId  String
-  githubPrUrl String
-  author      String
-  mergedAt    DateTime?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  aiSummary   String?
-  branchName  String?
-  feature     Feature?          @relation(fields: [featureId], references: [id])
-  tenant      Tenant            @relation(fields: [tenantId], references: [id])
-
-  @@map("pull_requests")
-}
-
-model BugReport {
-  id           String      @id @default(uuid())
-  tenantId     String
-  featureId    String?
-  title        String
-  description  String
-  severity     BugSeverity @default(MEDIUM)
-  status       BugStatus   @default(OPEN)
-  reportedById String
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  feature      Feature?    @relation(fields: [featureId], references: [id])
-  reportedBy   User        @relation(fields: [reportedById], references: [id])
-  tenant       Tenant      @relation(fields: [tenantId], references: [id])
-  comments     Comment[]
-
-  @@map("bug_reports")
-}
-
-model Release {
-  id          String           @id @default(uuid())
-  tenantId    String
-  version     String
-  title       String
-  description String?
-  releasedAt  DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  features    ReleaseFeature[]
-  tenant      Tenant           @relation(fields: [tenantId], references: [id])
-
-  @@map("releases")
-}
-
-model ReleaseFeature {
-  id        String  @id @default(uuid())
-  releaseId String
-  featureId String
-  feature   Feature @relation(fields: [featureId], references: [id])
-  release   Release @relation(fields: [releaseId], references: [id])
-
-  @@unique([releaseId, featureId])
-  @@map("release_features")
-}
-
-model Comment {
-  id          String     @id @default(uuid())
-  tenantId    String
-  featureId   String?
-  bugReportId String?
-  userId      String
-  content     String
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  bugReport   BugReport? @relation(fields: [bugReportId], references: [id])
-  feature     Feature?   @relation(fields: [featureId], references: [id])
-  tenant      Tenant     @relation(fields: [tenantId], references: [id])
-  user        User       @relation(fields: [userId], references: [id])
-
-  @@map("comments")
-}
-
-model ActivityLog {
-  id        String   @id @default(uuid())
-  tenantId  String
-  featureId String?
-  userId    String
-  action    String
-  metadata  Json?
-  createdAt DateTime @default(now())
-  feature   Feature? @relation(fields: [featureId], references: [id])
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  user      User     @relation(fields: [userId], references: [id])
-
-  @@map("activity_logs")
-}
+// =============================================================================
+// Enums
+// =============================================================================
 
 enum TenantPlan {
   FREE
+  TRIAL
   PRO
+  ENTERPRISE
 }
 
 enum UserRole {
@@ -242,6 +69,8 @@ enum UserRole {
 }
 
 enum FeatureStatus {
+  // BACKLOG is useful for ideas not yet planned.
+  BACKLOG
   PLANNED
   IN_PROGRESS
   IN_REVIEW
@@ -262,6 +91,12 @@ enum PullRequestStatus {
   CLOSED
 }
 
+// Helps distinguish GitHub-synced PRs from manually created PR records.
+enum PullRequestSource {
+  GITHUB
+  MANUAL
+}
+
 enum BugSeverity {
   LOW
   MEDIUM
@@ -274,4 +109,1215 @@ enum BugStatus {
   IN_PROGRESS
   RESOLVED
   CLOSED
+}
+
+// AI status is required because aiSummary = null is otherwise ambiguous.
+// It could mean pending, failed, disabled, or no summary generated.
+enum AiStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  DISABLED
+}
+
+// Tells the user/system how a PR was linked.
+// Important for trust: users need to know if linking was automatic or manual.
+enum LinkSource {
+  AUTO_BRANCH
+  AUTO_BODY
+  AUTO_COMMIT
+  MANUAL
+  SYSTEM
+}
+
+enum ReleaseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+// Webhook processing must be idempotent and debuggable.
+enum WebhookStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  IGNORED
+  DUPLICATE
+}
+
+// Activity can be caused by a user, ClearLoop system, or GitHub automation.
+enum ActorType {
+  USER
+  SYSTEM
+  GITHUB
+}
+
+// OAuth providers. Password auth lives on User.passwordHash.
+enum AuthProvider {
+  GOOGLE
+  GITHUB
+}
+
+// Generic entity type for activity/query convenience.
+// Specific FKs are also stored where useful for integrity and joins.
+enum EntityType {
+  FEATURE
+  BUG_REPORT
+  PULL_REQUEST
+  RELEASE
+  PROJECT
+  WORKSPACE
+  USER
+  INVITATION
+  GITHUB
+}
+
+enum GitHubInstallationStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING
+  REMOVED
+}
+
+enum LoginSessionStatus {
+  PENDING
+  USED
+  EXPIRED
+  CANCELLED
+}
+
+// =============================================================================
+// Global identity
+// =============================================================================
+
+// User is the global person/login identity.
+// One User can belong to many workspaces through WorkspaceMember.
+model User {
+  id String @id @default(uuid())
+
+  // Global login email. Store lowercase in application code.
+  email String @unique
+
+  // Password hash for email/password login.
+  // Nullable for OAuth-only accounts.
+  passwordHash String?
+
+  name      String?
+  avatarUrl String?
+
+  // Global ban/disable flag.
+  // Workspace-specific deactivation lives on WorkspaceMember.isActive.
+  isActive Boolean @default(true)
+
+  // Needed for email verification flows.
+  emailVerifiedAt DateTime?
+
+  // Useful for security dashboards and account recovery.
+  lastLoginAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // OAuth identities. Supports multiple providers cleanly.
+  identities AuthIdentity[]
+
+  // Workspace memberships.
+  memberships WorkspaceMember[]
+
+  // Auth/security tokens.
+  refreshTokens      RefreshToken[]
+  loginSessions      LoginSession[]
+  passwordResets     PasswordResetToken[]
+  emailVerifications EmailVerificationToken[]
+
+  @@map("users")
+}
+
+// AuthIdentity stores OAuth provider accounts.
+// This is better than storing only githubId/googleId on User because:
+// - a user can later link multiple providers
+// - provider account data is isolated
+// - you can store provider-specific metadata
+model AuthIdentity {
+  id String @id @default(uuid())
+
+  userId   String
+  provider AuthProvider
+
+  // GitHub/Google account ID. Stable external identity.
+  providerAccountId String
+
+  // Email/avatar from provider at login time.
+  email     String?
+  avatarUrl String?
+
+  // Optional provider tokens.
+  // If you store these, encrypt them at rest.
+  accessToken  String?
+  refreshToken String?
+  tokenExpiresAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // One provider account can only belong to one ClearLoop user.
+  @@unique([provider, providerAccountId])
+
+  @@index([userId])
+  @@index([email])
+  @@map("auth_identities")
+}
+
+// =============================================================================
+// Workspace / tenant
+// =============================================================================
+
+model Tenant {
+  id String @id @default(uuid())
+
+  name String
+
+  // Used for URLs/subdomains and workspace identification.
+  slug String @unique
+
+  plan TenantPlan @default(FREE)
+
+  // Workspace-level AI toggle.
+  aiEnabled Boolean @default(true)
+
+  // Flexible workspace settings:
+  // - branch patterns
+  // - PR linking patterns
+  // - release note preferences
+  // - AI preferences
+  settings Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Memberships, not global users directly.
+  members WorkspaceMember[]
+
+  invitations Invitation[]
+
+  projects Project[]
+  features Feature[]
+  bugReports BugReport[]
+  pullRequests PullRequest[]
+  releases Release[]
+
+  comments Comment[]
+  activityLogs ActivityLog[]
+
+  projectMembers ProjectMember[]
+
+  releaseFeatures ReleaseFeature[]
+  releaseBugs ReleaseBug[]
+
+  githubInstallations GitHubInstallation[]
+  githubRepositories GitHubRepository[]
+  githubInstallStates GitHubInstallState[]
+
+  webhookEvents WebhookEvent[]
+
+  @@map("tenants")
+}
+
+// WorkspaceMember is the old "User" concept inside one workspace.
+// It stores role, active state, and tenant-scoped profile details.
+model WorkspaceMember {
+  id String @id @default(uuid())
+
+  // Global identity.
+  userId String
+
+  // Workspace this membership belongs to.
+  tenantId String
+
+  // Denormalized for convenience and invitations.
+  // Keep in sync with User.email when email changes.
+  email String
+
+  // Denormalized display name.
+  name String?
+
+  // Workspace role.
+  role UserRole @default(DEVELOPER)
+
+  // Optional profile fields that may differ per workspace.
+  designation    String?
+  githubUsername String?
+  avatarUrl      String?
+
+  // Workspace-specific deactivation.
+  isActive Boolean @default(true)
+
+  // Increment this when role changes or membership is deactivated
+  // to invalidate existing JWTs that contain an old tokenVersion.
+  tokenVersion Int @default(0)
+
+  // Invitation/onboarding metadata.
+  invitedAt       DateTime?
+  invitedByMemberId String?
+  joinedAt        DateTime?
+
+  // Useful for active-user metrics.
+  lastActiveAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Who invited this member.
+  invitedBy WorkspaceMember? @relation("MemberInvitations", fields: [invitedByMemberId], references: [id], onDelete: SetNull)
+  invited   WorkspaceMember[] @relation("MemberInvitations")
+
+  // Project membership.
+  projectMembers      ProjectMember[] @relation("ProjectMemberMember")
+  addedProjectMembers ProjectMember[] @relation("ProjectMemberAddedBy")
+
+  // Feature relations.
+  createdFeatures  Feature[] @relation("FeatureCreator")
+  assignedFeatures Feature[] @relation("FeatureAssignee")
+
+  // Bug relations.
+  reportedBugs BugReport[] @relation("BugReporter")
+  assignedBugs BugReport[] @relation("BugAssignee")
+  closedBugs   BugReport[] @relation("BugClosedBy")
+
+  comments     Comment[]
+  activityLogs ActivityLog[]
+
+  authoredPullRequests PullRequest[] @relation("PullRequestAuthor")
+
+  invitationsSent     Invitation[] @relation("InvitationSender")
+  invitationsAccepted Invitation[] @relation("InvitationAccepter")
+
+  releasesCreated   Release[] @relation("ReleaseCreator")
+  releasesPublished Release[] @relation("ReleasePublisher")
+
+  refreshTokens RefreshToken[]
+
+  githubInstallStates GitHubInstallState[]
+
+  // One membership per user per workspace.
+  @@unique([userId, tenantId])
+
+  // Useful for composite tenant-scoped relations later.
+  @@unique([tenantId, id])
+
+  @@index([tenantId, isActive])
+  @@index([tenantId, email])
+  @@index([email])
+  @@map("workspace_members")
+}
+
+// =============================================================================
+// Invitations
+// =============================================================================
+
+model Invitation {
+  id String @id @default(uuid())
+
+  tenantId String
+  email    String
+
+  role UserRole @default(DEVELOPER)
+
+  // Never store raw invite tokens.
+  // Store SHA-256 hash and send raw token only in email/link.
+  tokenHash String @unique
+
+  status InvitationStatus @default(PENDING)
+
+  invitedByMemberId  String?
+  acceptedByMemberId String?
+
+  // Required expiry. Default in application code: now + 7 days.
+  expiresAt DateTime
+
+  acceptedAt DateTime?
+  revokedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  invitedBy WorkspaceMember? @relation("InvitationSender", fields: [invitedByMemberId], references: [id], onDelete: SetNull)
+  acceptedBy WorkspaceMember? @relation("InvitationAccepter", fields: [acceptedByMemberId], references: [id], onDelete: SetNull)
+
+  // Useful for composite tenant-scoped relations later.
+  @@unique([tenantId, id])
+
+  @@index([tenantId, email])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("invitations")
+
+  // Add raw SQL partial unique index:
+  // CREATE UNIQUE INDEX "invitations_pending_email_unique"
+  // ON "invitations" ("tenantId", "email")
+  // WHERE "acceptedAt" IS NULL AND "revokedAt" IS NULL;
+}
+
+// =============================================================================
+// Projects
+// =============================================================================
+
+model Project {
+  id String @id @default(uuid())
+
+  tenantId String
+
+  name        String
+  description String?
+
+  // Human-friendly project key, e.g. WEB, API, MOBILE.
+  // Used to generate issue keys like WEB-12.
+  key String?
+
+  // Simple issue number counter.
+  // For unified feature/bug numbering, use a dedicated sequence table later.
+  nextIssueNumber Int @default(1)
+
+  // Soft archive instead of destructive delete.
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  members ProjectMember[]
+
+  features   Feature[]
+  bugReports BugReport[]
+  pullRequests PullRequest[]
+
+  repositories GitHubRepository[]
+  releases     Release[]
+  activityLogs ActivityLog[]
+
+  installStates GitHubInstallState[]
+
+  // Project key unique inside workspace.
+  @@unique([tenantId, key])
+
+  // Useful for composite tenant-scoped relations later.
+  @@unique([tenantId, id])
+
+  @@index([tenantId])
+  @@index([tenantId, archivedAt])
+  @@map("projects")
+}
+
+// ProjectMember means a workspace member is included in a project.
+// For MVP, avoid project-level RBAC unless you truly need it.
+model ProjectMember {
+  id String @id @default(uuid())
+
+  tenantId  String
+  projectId String
+  memberId  String
+
+  addedByMemberId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  member  WorkspaceMember  @relation("ProjectMemberMember", fields: [memberId], references: [id], onDelete: Cascade)
+  addedBy WorkspaceMember? @relation("ProjectMemberAddedBy", fields: [addedByMemberId], references: [id], onDelete: SetNull)
+
+  // One member once per project.
+  @@unique([projectId, memberId])
+
+  // Useful for composite tenant-scoped relations later.
+  @@unique([tenantId, id])
+
+  @@index([tenantId])
+  @@index([memberId])
+  @@map("project_members")
+}
+
+// =============================================================================
+// Features
+// =============================================================================
+
+model Feature {
+  id String @id @default(uuid())
+
+  tenantId  String
+  projectId String
+
+  title       String
+  description String?
+
+  // Why this feature is needed. Useful for product context.
+  reason String?
+
+  status   FeatureStatus   @default(PLANNED)
+  priority FeaturePriority @default(MEDIUM)
+
+  // Human-friendly issue number/key.
+  // Example: number=12, key="WEB-12".
+  number Int?
+  key    String? @unique
+
+  createdById  String
+  assignedToId String?
+
+  // Useful for cycle time and delivery metrics.
+  startedAt   DateTime?
+  completedAt DateTime?
+  releasedAt  DateTime?
+
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Restrict delete to preserve historical ownership.
+  createdBy WorkspaceMember @relation("FeatureCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  assignedTo WorkspaceMember? @relation("FeatureAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  bugReports   BugReport[]
+  comments     Comment[]
+  activityLogs ActivityLog[]
+  pullRequests PullRequest[]
+
+  releases ReleaseFeature[]
+
+  // Issue number unique per project.
+  @@unique([projectId, number])
+
+  // Useful for composite tenant-scoped relations later.
+  @@unique([tenantId, id])
+
+  @@index([tenantId, projectId])
+  @@index([tenantId, status])
+  @@index([assignedToId])
+  @@index([createdById])
+  @@map("features")
+}
+
+// =============================================================================
+// Bug reports
+// =============================================================================
+
+model BugReport {
+  id String @id @default(uuid())
+
+  tenantId String
+
+  // Recommended: make required after backfill.
+  // Bugs should usually belong to a project even if not linked to a feature.
+  projectId String?
+
+  // Optional parent feature.
+  featureId String?
+
+  title       String
+  description String
+
+  severity BugSeverity @default(MEDIUM)
+  status   BugStatus   @default(OPEN)
+
+  // Human-friendly bug number/key.
+  // Example: number=34, key="WEB-34".
+  number Int?
+  key    String? @unique
+
+  reportedById String
+  assignedToId String?
+  closedById   String?
+
+  // The PR that resolved this bug.
+  // This is critical so merging one bug-fix PR does not close unrelated bugs.
+  resolvedByPrId String?
+  resolvedAt     DateTime?
+
+  closedAt DateTime?
+
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  feature Feature? @relation(fields: [featureId], references: [id], onDelete: SetNull)
+
+  reportedBy WorkspaceMember @relation("BugReporter", fields: [reportedById], references: [id], onDelete: Restrict)
+  assignedTo WorkspaceMember? @relation("BugAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  closedBy   WorkspaceMember? @relation("BugClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+
+  // One PR can resolve many bugs.
+  resolvedByPr PullRequest? @relation("BugResolvedByPr", fields: [resolvedByPrId], references: [id], onDelete: SetNull)
+
+  // All PRs linked to this bug, whether or not merged.
+  pullRequests PullRequest[] @relation("BugPullRequests")
+
+  comments     Comment[]
+  activityLogs ActivityLog[]
+
+  releases ReleaseBug[]
+
+  // Bug number unique per project.
+  @@unique([projectId, number])
+
+  // Useful for composite tenant-scoped relations later.
+  @@unique([tenantId, id])
+
+  @@index([tenantId, status])
+  @@index([tenantId, projectId])
+  @@index([featureId])
+  @@index([resolvedByPrId])
+  @@index([assignedToId])
+  @@map("bug_reports")
+}
+
+// =============================================================================
+// Pull requests
+// =============================================================================
+
+model PullRequest {
+  id String @id @default(uuid())
+
+  tenantId String
+
+  // Project can be inferred from repository mapping, feature, or bug.
+  // Needed for unlinked PR inbox and project-level reporting.
+  projectId String?
+
+  // Repository is required for real GitHub PRs.
+  repositoryId String?
+
+  // Optional links.
+  featureId   String?
+  bugReportId String?
+
+  source PullRequestSource @default(GITHUB)
+
+  // Stable GitHub GraphQL node ID.
+  // This is the safest global unique identifier for GitHub objects.
+  githubNodeId String? @unique
+
+  // Optional numeric/database ID from GitHub.
+  githubDatabaseId String?
+
+  // PR number inside repository, e.g. #142.
+  githubPrNumber Int?
+
+  githubPrUrl String?
+
+  title       String
+  description String?
+
+  // Branch information is needed for auto-linking and release context.
+  branchName String?
+  baseBranch String?
+  headBranch String?
+
+  status  PullRequestStatus @default(OPEN)
+
+  // GitHub has draft PRs. Keep status simple and store draft separately.
+  isDraft Boolean @default(false)
+
+  // Legacy/free-text author name from GitHub payload.
+  author String?
+
+  // GitHub login, e.g. "sumitsinha".
+  authorGithubLogin String?
+
+  // Mapped ClearLoop workspace member, if author can be matched.
+  authorMemberId String?
+
+  githubCreatedAt DateTime?
+  mergedAt        DateTime?
+  closedAt        DateTime?
+
+  // Useful for AI context and engineering metrics.
+  additions    Int?
+  deletions    Int?
+  changedFiles Int?
+
+  // AI summary state.
+  aiStatus    AiStatus @default(PENDING)
+  aiSummary   String?
+  aiReleaseNote String?
+  aiRisk      String?
+  aiError     String?
+  aiModel     String?
+  aiTokensUsed Int?
+  aiUpdatedAt DateTime?
+
+  // How/when this PR was linked to ClearLoop work.
+  linkSource LinkSource?
+  linkedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  repository GitHubRepository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+
+  feature Feature? @relation(fields: [featureId], references: [id], onDelete: SetNull)
+
+  // Primary linked bug.
+  // If you later need many-to-many PR<->Bug, add PullRequestBugReport.
+  bugReport BugReport? @relation("BugPullRequests", fields: [bugReportId], references: [id], onDelete: SetNull)
+
+  authorMember WorkspaceMember? @relation("PullRequestAuthor", fields: [authorMemberId], references: [id], onDelete: SetNull)
+
+  // Bugs this PR has resolved.
+  resolvedBugs BugReport[] @relation("BugResolvedByPr")
+
+  activityLogs ActivityLog[]
+  webhookEvents WebhookEvent[]
+
+  // Prevent duplicate PRs from webhook retries.
+  @@unique([repositoryId, githubPrNumber])
+
+  // Useful for composite tenant-scoped relations later.
+  @@unique([tenantId, id])
+
+  @@index([tenantId, status])
+  @@index([tenantId, projectId])
+  @@index([tenantId, repositoryId])
+  @@index([repositoryId, status])
+  @@index([featureId])
+  @@index([bugReportId])
+  @@index([authorMemberId])
+  @@index([aiStatus])
+  @@map("pull_requests")
+}
+
+// =============================================================================
+// Releases
+// =============================================================================
+
+model Release {
+  id String @id @default(uuid())
+
+  tenantId String
+
+  // Optional project scope.
+  // If releases are workspace-level, leave null.
+  projectId String?
+
+  version String
+  title   String
+  description String?
+
+  status ReleaseStatus @default(DRAFT)
+
+  // Final generated release notes.
+  notes String?
+
+  // AI generation state for release notes.
+  aiStatus AiStatus @default(PENDING)
+
+  releasedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdById   String?
+  publishedById String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  createdBy   WorkspaceMember? @relation("ReleaseCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  publishedBy WorkspaceMember? @relation("ReleasePublisher", fields: [publishedById], references: [id], onDelete: SetNull)
+
+  features ReleaseFeature[]
+  bugs     ReleaseBug[]
+
+  activityLogs ActivityLog[]
+
+  // If releases are workspace-level, version unique per tenant.
+  // If releases become project-specific, change uniqueness strategy.
+  @@unique([tenantId, version])
+
+  // Useful for composite tenant-scoped relations later.
+  @@unique([tenantId, id])
+
+  @@index([tenantId, status])
+  @@index([projectId])
+  @@index([aiStatus])
+  @@map("releases")
+}
+
+// Join table: Release <-> Feature.
+model ReleaseFeature {
+  id String @id @default(uuid())
+
+  tenantId  String
+  releaseId String
+  featureId String
+
+  createdAt DateTime @default(now())
+
+  release Release @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  feature Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([releaseId, featureId])
+  @@unique([tenantId, id])
+  @@index([tenantId])
+  @@map("release_features")
+}
+
+// Join table: Release <-> BugReport.
+// Needed because release notes should include resolved bugs,
+// including bugs that may not belong to a feature.
+model ReleaseBug {
+  id String @id @default(uuid())
+
+  tenantId    String
+  releaseId   String
+  bugReportId String
+
+  createdAt DateTime @default(now())
+
+  release   Release   @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  bugReport BugReport @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([releaseId, bugReportId])
+  @@unique([tenantId, id])
+  @@index([tenantId])
+  @@map("release_bugs")
+}
+
+// =============================================================================
+// Comments
+// =============================================================================
+
+model Comment {
+  id String @id @default(uuid())
+
+  tenantId String
+
+  // Comment belongs to exactly one target:
+  // featureId XOR bugReportId.
+  // Enforce with raw SQL CHECK constraint.
+  featureId   String?
+  bugReportId String?
+
+  memberId String
+
+  content String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  feature   Feature?   @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  bugReport BugReport? @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
+  member    WorkspaceMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  // Useful for composite tenant-scoped relations later.
+  @@unique([tenantId, id])
+
+  @@index([tenantId])
+  @@index([featureId])
+  @@index([bugReportId])
+  @@index([memberId])
+  @@map("comments")
+
+  // Add raw SQL check:
+  // ALTER TABLE "comments"
+  // ADD CONSTRAINT "comments_one_target_check"
+  // CHECK (
+  //   ("featureId" IS NOT NULL AND "bugReportId" IS NULL) OR
+  //   ("featureId" IS NULL AND "bugReportId" IS NOT NULL)
+  // );
+}
+
+// =============================================================================
+// Activity logs
+// =============================================================================
+
+// ActivityLog is the audit trail for product and automation events.
+model ActivityLog {
+  id String @id @default(uuid())
+
+  tenantId String
+
+  // Who/what caused the event.
+  actorType ActorType @default(USER)
+
+  // Nullable because GitHub/system events may not have a ClearLoop member.
+  memberId String?
+
+  // Snapshot name for display if member is deleted or actor is external.
+  actorName String?
+
+  // Use standardized string constants in code, e.g.:
+  // FEATURE_STATUS_CHANGED
+  // BUG_RESOLVED_BY_PR
+  // PULL_REQUEST_LINKED
+  // RELEASE_PUBLISHED
+  action String
+
+  // Extra structured data:
+  // from/to status, PR number, trigger, commit SHA, etc.
+  metadata Json?
+
+  // Generic entity reference for flexible queries/UI.
+  entityType EntityType?
+  entityId   String?
+
+  // Specific FKs for integrity and easy joins.
+  featureId     String?
+  bugReportId   String?
+  pullRequestId String?
+  releaseId     String?
+  projectId     String?
+
+  // Activity logs are immutable. No updatedAt.
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  member WorkspaceMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+
+  feature     Feature?     @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  bugReport   BugReport?   @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
+  pullRequest PullRequest? @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  release     Release?     @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  project     Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Useful for composite tenant-scoped relations later.
+  @@unique([tenantId, id])
+
+  @@index([tenantId, featureId])
+  @@index([tenantId, bugReportId])
+  @@index([tenantId, pullRequestId])
+  @@index([tenantId, releaseId])
+  @@index([tenantId, projectId])
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, createdAt])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+// =============================================================================
+// GitHub integration
+// =============================================================================
+
+// GitHub App installation.
+// A tenant can have more than one installation in real life.
+model GitHubInstallation {
+  id String @id @default(uuid())
+
+  tenantId String
+
+  // GitHub installation ID. Stable external identifier.
+  githubInstallationId String @unique
+
+  accountId    String?
+  accountLogin String?
+  accountType  String? // Organization or User
+
+  status GitHubInstallationStatus @default(ACTIVE)
+
+  suspendedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  repositories GitHubRepository[]
+  webhookEvents WebhookEvent[]
+
+  // Useful for composite tenant-scoped relations later.
+  @@unique([tenantId, id])
+
+  @@index([tenantId])
+  @@map("github_installations")
+}
+
+// Repository connected through a GitHub installation.
+// Repositories can be mapped to projects.
+model GitHubRepository {
+  id String @id @default(uuid())
+
+  tenantId       String
+  installationId String
+
+  // Optional project mapping.
+  projectId String?
+
+  // Stable GitHub repository identifiers.
+  githubRepoId String @unique
+  githubNodeId String @unique
+
+  owner       String
+  name        String
+  fullName    String
+  isPrivate   Boolean @default(false)
+  defaultBranch String?
+
+  // Webhook health/debugging.
+  webhookActive Boolean @default(false)
+  lastWebhookAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  installation GitHubInstallation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  pullRequests PullRequest[]
+  webhookEvents WebhookEvent[]
+
+  // Useful for composite tenant-scoped relations later.
+  @@unique([tenantId, id])
+
+  @@index([tenantId])
+  @@index([installationId])
+  @@index([projectId])
+  @@map("github_repositories")
+}
+
+// One-time state for GitHub App install/callback flows.
+// Prevents forged/tampered state parameters.
+model GitHubInstallState {
+  // Random nonce used as GitHub state parameter.
+  nonce String @id @default(uuid())
+
+  tenantId String
+
+  memberId String?
+  projectId String?
+
+  // Example purposes:
+  // - github_app_install
+  // - github_app_update
+  purpose String
+
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  member WorkspaceMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, expiresAt])
+  @@index([expiresAt])
+  @@map("github_install_states")
+}
+
+// Webhook event store.
+// Required for idempotency, retries, replay, and debugging.
+model WebhookEvent {
+  id String @id @default(uuid())
+
+  // GitHub X-GitHub-Delivery header.
+  deliveryId String @unique
+
+  eventType String
+  action    String?
+
+  status WebhookStatus @default(RECEIVED)
+
+  attempts Int @default(0)
+
+  // Full payload for debugging/replay.
+  payload Json?
+
+  error String?
+
+  // Optional tenant/repository/PR context after parsing.
+  tenantId       String?
+  installationId String?
+  repositoryId   String?
+  pullRequestId  String?
+
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  // Useful for delayed retries.
+  nextRetryAt DateTime?
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  installation GitHubInstallation? @relation(fields: [installationId], references: [id], onDelete: SetNull)
+  repository   GitHubRepository?   @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  pullRequest  PullRequest?        @relation(fields: [pullRequestId], references: [id], onDelete: SetNull)
+
+  @@index([status, eventType])
+  @@index([status])
+  @@index([tenantId])
+  @@index([installationId])
+  @@index([repositoryId])
+  @@index([pullRequestId])
+  @@index([nextRetryAt])
+  @@index([receivedAt])
+  @@map("webhook_events")
+}
+
+// =============================================================================
+// Auth/security tokens
+// =============================================================================
+
+// Refresh tokens allow revocation and rotation.
+// Prefer short-lived access tokens + refresh tokens over 7-day JWT-only sessions.
+model RefreshToken {
+  id String @id @default(uuid())
+
+  userId String
+
+  // Optional tenant-scoped membership this token is for.
+  memberId String?
+
+  // Store hash, not raw token.
+  tokenHash String @unique
+
+  expiresAt DateTime
+
+  revokedAt DateTime?
+
+  // For refresh token rotation.
+  replacedByTokenHash String?
+
+  lastUsedAt DateTime?
+
+  // Useful for security auditing.
+  userAgent String?
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  member WorkspaceMember? @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([memberId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+// LoginSession is used for secure multi-workspace login.
+//
+// Flow:
+// 1. User logs in successfully.
+// 2. If multiple workspaces exist, create LoginSession.
+// 3. Frontend selects workspace.
+// 4. Backend validates session and issues tenant-scoped JWT.
+//
+// This prevents issuing JWTs from only email + workspaceId.
+model LoginSession {
+  id String @id @default(uuid())
+
+  userId String?
+
+  // Store hash, not raw session code.
+  tokenHash String @unique
+
+  status LoginSessionStatus @default(PENDING)
+
+  // Serialized list of workspace choices.
+  workspaces Json?
+
+  // Selected workspace after user chooses.
+  selectedTenantId String?
+
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  userAgent String?
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("login_sessions")
+}
+
+// Password reset tokens.
+model PasswordResetToken {
+  id String @id @default(uuid())
+
+  userId String
+
+  // Store hash, not raw token.
+  tokenHash String @unique
+
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+// Email verification tokens.
+model EmailVerificationToken {
+  id String @id @default(uuid())
+
+  userId String
+
+  // Email being verified.
+  email String
+
+  // Store hash, not raw token.
+  tokenHash String @unique
+
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([email])
+  @@index([expiresAt])
+  @@map("email_verification_tokens")
 }

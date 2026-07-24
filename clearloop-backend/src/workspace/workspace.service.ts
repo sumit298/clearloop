@@ -59,11 +59,11 @@ export class WorkspaceService {
       bugsByStatus,
     ] = await Promise.all([
       // Total users
-      this.prisma.user.count({
+      this.prisma.workspaceMember.count({
         where: { tenantId },
       }),
       // Active users
-      this.prisma.user.count({
+      this.prisma.workspaceMember.count({
         where: { tenantId, isActive: true },
       }),
       // Total projects

@@ -12,7 +12,7 @@ export class BugReportsService {
 
   async createBugReport(
     tenantId: string,
-    userId: string,
+    memberId: string,
     dto: CreateBugReportDto,
   ) {
     if (dto.featureId) {
@@ -28,7 +28,7 @@ export class BugReportsService {
       const created = await tx.bugReport.create({
         data: {
           tenantId,
-          reportedById: userId,
+          reportedById: memberId,
           title: dto.title,
           description: dto.description,
           severity: dto.severity || 'MEDIUM',
@@ -54,7 +54,7 @@ export class BugReportsService {
           data: {
             tenantId,
             featureId: dto.featureId,
-            userId: userId,
+            memberId: memberId,
             action: 'BUG_REPORTED',
             metadata: {
               bugReportId: created.id,
@@ -123,7 +123,7 @@ export class BugReportsService {
         },
         comments: {
           include: {
-            user: {
+            member: {
               select: {
                 id: true,
                 name: true,
@@ -148,7 +148,7 @@ export class BugReportsService {
   async update(
     tenantId: string,
     id: string,
-    userId: string,
+    memberId: string,
     dto: UpdateBugReportDto,
   ) {
     const bugReport = await this.prisma.bugReport.findFirst({
@@ -189,7 +189,7 @@ export class BugReportsService {
           data: {
             tenantId,
             featureId: bugReport.featureId,
-            userId,
+            memberId,
             action: 'BUG_STATUS_UPDATED',
             metadata: {
               bugReportId: bugReport.id,

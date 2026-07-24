@@ -18,7 +18,7 @@ export class ReleaseService {
     private aiService: AIService,
   ) {}
 
-  async create(tenantId: string, userId: string, dto: CreateReleaseDto) {
+  async create(tenantId: string, memberId: string, dto: CreateReleaseDto) {
     if (dto.featureIds && dto.featureIds.length > 0) {
       const features = await this.prisma.feature.findMany({
         where: {
@@ -64,6 +64,7 @@ export class ReleaseService {
       if (dto.featureIds && dto.featureIds.length) {
         await tx.releaseFeature.createMany({
           data: dto.featureIds.map((featureId) => ({
+            tenantId,
             releaseId: created.id,
             featureId,
           })),
@@ -206,7 +207,7 @@ export class ReleaseService {
     }
 
     await this.prisma.releaseFeature.create({
-      data: { releaseId, featureId },
+      data: { tenantId, releaseId, featureId },
     });
 
     return { message: 'Feature added to release successfully' };

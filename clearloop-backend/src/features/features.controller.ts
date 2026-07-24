@@ -30,7 +30,7 @@ export class FeaturesController {
   create(@Request() req: AuthenticatedRequest, @Body() createFeatureDto: CreateFeatureDto) {
     return this.featuresService.create(
       req.tenantId,
-      req.user.userId,
+      req.user.memberId,
       createFeatureDto,
     );
   }
@@ -54,7 +54,7 @@ export class FeaturesController {
   ) {
     return this.featuresService.update(
       req.tenantId,
-      req.user.userId,
+      req.user.memberId,
       id,
       updateFeatureDto,
     );
@@ -63,6 +63,6 @@ export class FeaturesController {
   @Delete(':id')
   @Roles('ADMIN', 'MANAGER')
   remove(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
-    return this.featuresService.remove(req.tenantId, req.user.userId, id);
+    return this.featuresService.remove(req.tenantId, req.user.memberId, id);
   }
 }

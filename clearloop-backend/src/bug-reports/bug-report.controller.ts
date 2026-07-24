@@ -30,7 +30,7 @@ export class BugReportsController {
   ) {
     return this.bugReportsService.createBugReport(
       req.tenantId,
-      req.user.userId,
+      req.user.memberId,
       createBugReportDto,
     );
   }
@@ -58,7 +58,7 @@ export class BugReportsController {
     return this.bugReportsService.update(
       req.tenantId,
       id,
-      req.user.userId,
+      req.user.memberId,
       updateBugReportDto,
     );
   }

@@ -14,145 +14,174 @@ import {
   Delete,
 } from '@nestjs/common';
 import { GithubService } from './github.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
 import { Roles, RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedRequest } from '../common/interfaces/authenticated-request.interface';
+import type { GitHubWebhookDto } from './dto/github-webhook.dto';
 import * as crypto from 'crypto';
 
 @Controller('github')
 export class GithubController {
-  constructor(private readonly githubService: GithubService) {}
+  constructor(
+    private readonly githubService: GithubService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   /**
-   * Get GitHub App installation URL
-   * Returns the URL for the frontend to redirect to
+   * Get GitHub App installation URL.
+   *
+   * The state param is now a random, server-stored nonce (GitHubInstallState)
+   * instead of client-decodable base64 JSON. Previously anyone could decode
+   * the old state, swap the tenantId, and re-encode it — nothing forced the
+   * callback's tenantId to match who actually clicked "install". The nonce
+   * closes that: the callback looks tenantId up from OUR database row, never
+   * from anything the client (or GitHub, echoing the state back) supplies.
    */
   @Get('install-url')
   @UseGuards(JwtAuthGuard, TenantGuard)
   async getInstallUrl(@Request() req: AuthenticatedRequest) {
     const clientId = process.env.GITHUB_APP_CLIENT_ID;
-
     if (!clientId) {
       throw new BadRequestException('GitHub App not configured');
     }
 
-    // Check if installation already exists
     const installation = await this.githubService.getInstallation(req.tenantId);
 
-    if (installation.connected && installation.installationId) {
-      // Already installed - return configuration URL
+    if (installation.connected && installation.installations[0]) {
       return {
-        url: `https://github.com/settings/installations/${installation.installationId}`,
+        url: `https://github.com/settings/installations/${installation.installations[0].githubInstallationId}`,
         alreadyInstalled: true,
       };
     }
 
-    // Not installed - return installation URL with state
-    const state = Buffer.from(
-      JSON.stringify({
+    const installState = await this.prisma.gitHubInstallState.create({
+      data: {
         tenantId: req.tenantId,
-        timestamp: Date.now(),
-      }),
-    ).toString('base64url');
+        memberId: req.user.memberId,
+        purpose: 'github_app_install',
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+      },
+    });
 
     const installUrl = `https://github.com/apps/${process.env.GITHUB_APP_NAME}/installations/new`;
 
     return {
-      url: `${installUrl}?state=${state}`,
+      url: `${installUrl}?state=${installState.nonce}`,
       alreadyInstalled: false,
     };
   }
 
   /**
-   * GitHub App installation callback
-   * Called after user installs the app
+   * GitHub App installation callback. tenantId comes from the GitHubInstallState
+   * row looked up by nonce — never decoded from anything the client sent.
    */
   @Get('install/callback')
   async installationCallback(
-    @Query('installation_id') installationId: string,
+    @Query('installation_id') githubInstallationId: string,
     @Query('setup_action') setupAction: string,
-    @Query('state') state: string,
+    @Query('state') nonce: string,
     @Res() res,
   ) {
+    const frontendUrl = process.env.FRONTEND_URL;
+
     try {
-      console.log('=== GITHUB CALLBACK HIT ===');
-      console.log({
-        installationId,
-        setupAction,
-        state,
+      const installState = await this.prisma.gitHubInstallState.findUnique({
+        where: { nonce },
       });
 
-      const decoded = JSON.parse(Buffer.from(state, 'base64url').toString());
+      if (!installState) {
+        throw new BadRequestException('Invalid or unknown install state');
+      }
+      if (installState.usedAt) {
+        throw new BadRequestException('Install state already used');
+      }
+      if (installState.expiresAt < new Date()) {
+        throw new BadRequestException('Install state expired');
+      }
 
-      console.log('Decoded state:', decoded);
+      await this.prisma.gitHubInstallState.update({
+        where: { nonce },
+        data: { usedAt: new Date() },
+      });
 
       await this.githubService.saveInstallation(
-        decoded.tenantId,
-        installationId,
+        installState.tenantId,
+        githubInstallationId,
       );
 
-      console.log('Installation saved');
-
-      const frontendUrl = process.env.FRONTEND_URL;
       return res.redirect(`${frontendUrl}/dashboard/settings?github=connected`);
     } catch (error) {
       console.error('GitHub callback failed:', error);
-
-      const frontendUrl = process.env.FRONTEND_URL;
       return res.redirect(`${frontendUrl}/dashboard/settings?github=error`);
     }
   }
 
-  /**
-   * Get GitHub installation status
-   */
   @Get('installation')
   @UseGuards(JwtAuthGuard, TenantGuard)
   async getInstallation(@Request() req: AuthenticatedRequest) {
     return this.githubService.getInstallation(req.tenantId);
   }
 
-  /**
-   * Disconnect GitHub App
-   */
-  @Delete('installation')
+  @Delete('installation/:id')
   @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
   @Roles('ADMIN')
-  async disconnectInstallation(@Request() req: AuthenticatedRequest) {
-    return this.githubService.disconnectInstallation(req.tenantId);
+  async disconnectInstallation(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') installationId: string,
+  ) {
+    return this.githubService.disconnectInstallation(
+      req.tenantId,
+      installationId,
+    );
+  }
+
+  @Post(':id/connect-project')
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
+  @Roles('ADMIN', 'MANAGER')
+  async connectRepositoryToProject(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') repositoryId: string,
+    @Body() body: { projectId: string },
+  ) {
+    return this.githubService.connectRepositoryToProject(
+      req.tenantId,
+      repositoryId,
+      body.projectId,
+    );
   }
 
   /**
-   * GitHub webhook endpoint (no auth - verified by signature)
+   * GitHub webhook endpoint (no auth — verified by HMAC signature).
    */
   @Post('webhook')
   async handleWebHook(
     @Req() req: Request & { rawBody?: Buffer },
-    @Body() payload: any,
+    @Body() payload: GitHubWebhookDto,
     @Headers('x-hub-signature-256') signature: string,
     @Headers('x-github-event') event: string,
+    @Headers('x-github-delivery') deliveryId: string,
   ) {
     if (process.env.GITHUB_WEBHOOK_SECRET) {
       this.verifyWebhookSignature(req.rawBody, signature);
     }
 
-    // Handle installation events
+    if (!deliveryId) {
+      throw new BadRequestException('Missing X-GitHub-Delivery header');
+    }
+
     if (event === 'installation' || event === 'installation_repositories') {
       return this.githubService.handleInstallationEvent(payload);
     }
 
-    // Handle PR events
     if (event !== 'pull_request') {
       return { message: `Event ${event} ignored` };
     }
 
-    return this.githubService.handleWebhook(payload);
+    return this.githubService.handleWebhook(deliveryId, event, payload);
   }
 
-  /**
-   * List all pull requests
-   */
   @Get('pull-requests')
   @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
   listPullRequest(
@@ -162,9 +191,6 @@ export class GithubController {
     return this.githubService.listPullRequests(req.tenantId, featureId);
   }
 
-  /**
-   * Get pull request details
-   */
   @Get('pull-requests/:id')
   @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
   getPullRequest(
@@ -174,9 +200,6 @@ export class GithubController {
     return this.githubService.getPullRequest(req.tenantId, id);
   }
 
-  /**
-   * Manually link PR to feature
-   */
   @Post('pull-requests/:id/link')
   @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
   @Roles('ADMIN', 'MANAGER', 'DEVELOPER')
@@ -187,14 +210,12 @@ export class GithubController {
   ) {
     return this.githubService.linkPRToFeature(
       req.tenantId,
+      req.user.memberId,
       pullRequestId,
       body.featureId,
     );
   }
 
-  /**
-   * Manually unlink PR from feature
-   */
   @Post('pull-requests/:id/unlink')
   @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
   @Roles('ADMIN', 'MANAGER', 'DEVELOPER')
@@ -202,33 +223,27 @@ export class GithubController {
     @Request() req: AuthenticatedRequest,
     @Param('id') pullRequestId: string,
   ) {
-    return this.githubService.unlinkPRFromFeature(req.tenantId, pullRequestId);
+    return this.githubService.unlinkPRFromFeature(
+      req.tenantId,
+      req.user.memberId,
+      pullRequestId,
+    );
   }
 
-  /**
-   * Verify GitHub webhook signature
-   */
   private verifyWebhookSignature(
     rawBody: Buffer | undefined,
     signature: string,
   ) {
     const secret = process.env.GITHUB_WEBHOOK_SECRET;
 
-    // If no secret configured, skip verification (dev mode)
     if (!secret) {
       console.log(
         '⚠️  Webhook signature verification skipped (no secret configured)',
       );
       return;
     }
-
-    if (!signature) {
-      throw new BadRequestException('Missing signature');
-    }
-
-    if (!rawBody) {
-      throw new BadRequestException('Missing request body');
-    }
+    if (!signature) throw new BadRequestException('Missing signature');
+    if (!rawBody) throw new BadRequestException('Missing request body');
 
     const hmac = crypto.createHmac('sha256', secret);
     const expectedSignature = 'sha256=' + hmac.update(rawBody).digest('hex');
@@ -239,7 +254,6 @@ export class GithubController {
     if (sigBuffer.length !== expectedBuffer.length) {
       throw new BadRequestException('Invalid signature');
     }
-
     if (!crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
       throw new BadRequestException('Invalid signature');
     }

@@ -2,11 +2,13 @@ export interface GitHubWebhookDto {
   action: string;
   pull_request?: {
     id: number;
+    node_id: string;
     number: number;
     title: string;
     body: string | null;
     state: string;
     html_url: string;
+    draft?: boolean,
     user: {
       login: string;
       avatar_url: string;
@@ -25,6 +27,7 @@ export interface GitHubWebhookDto {
     merged: boolean;
     merged_at: string | null;
     created_at: string;
+    closed_at: string | null, 
     updated_at: string;
   };
   repository?: {

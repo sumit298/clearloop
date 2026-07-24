@@ -36,7 +36,7 @@ export class UsersController {
 
   @Get('me')
   getOwnProfile(@Request() req: AuthenticatedRequest) {
-    return this.userService.findOne(req.tenantId, req.user.userId);
+    return this.userService.findOne(req.tenantId, req.user.memberId);
   }
 
   @Get(':id')
@@ -52,7 +52,7 @@ export class UsersController {
   ) {
     return this.userService.updateOwnProfile(
       req.tenantId,
-      req.user.userId,
+      req.user.memberId,
       dto,
     );
   } 
@@ -64,7 +64,7 @@ export class UsersController {
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,
   ) {
-    if(id === req.user.userId) {
+    if(id === req.user.memberId) {
       throw new ForbiddenException("Use Patch /users/me to update your own profile")
     }
     return this.userService.update(req.tenantId, id, req.user.role, dto);

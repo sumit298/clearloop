@@ -61,16 +61,16 @@ export class ProjectsController {
     @Param('id') projectId: string,
     @Body() dto: AddMemberDto,
   ) {
-    return this.projectsService.addMember(req.tenantId, projectId, dto.userId);
+    return this.projectsService.addMember(req.tenantId, projectId, dto.memberId);
   }
 
-  @Delete(':id/members/:userId')
+  @Delete(':id/members/:memberId')
   @Roles('ADMIN', 'MANAGER')
   removeMember(
     @Request() req: AuthenticatedRequest,
     @Param('id') projectId: string,
-    @Param('userId') userId: string,
+    @Param('memberId') memberId: string,
   ) {
-    return this.projectsService.removeMember(req.tenantId, projectId, userId);
+    return this.projectsService.removeMember(req.tenantId, projectId, memberId);
   }
 }
