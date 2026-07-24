@@ -25,5 +25,5 @@ export class UpdateProjectDto {
 export class AddMemberDto {
   @IsString()
   @IsNotEmpty()
-  userId!: string;
+  memberId!: string;
 }
