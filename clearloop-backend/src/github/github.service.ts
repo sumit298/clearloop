@@ -140,6 +140,9 @@ export class GithubService {
 
   async handleInstallationEvent(payload: any) {
     const { action, installation, repositories } = payload;
+    if (!installation?.id) {
+      throw new BadRequestException('Invalid installation data');
+    }
     const githubInstallationId = installation.id.toString();
 
     this.logger.log(
@@ -369,8 +372,8 @@ export class GithubService {
           branchName: pr.head.ref,
           baseBranch: pr.base?.ref,
           headBranch: pr.head.ref,
-          author: pr.user.login,
-          authorGithubLogin: pr.user.login,
+          author: pr.user.login ?? "Unknown",
+          authorGithubLogin: pr.user.login ?? 'Unknown',
           isDraft: !!pr.draft,
           status: 'OPEN',
           source: 'GITHUB',
@@ -397,7 +400,7 @@ export class GithubService {
               tenantId,
               featureId,
               actorType: 'GITHUB',
-              actorName: pr.user.login,
+              actorName: pr.user?.login,
               action: 'FEATURE_STATUS_UPDATED_BY_PR',
               metadata: {
                 status: 'IN_PROGRESS',

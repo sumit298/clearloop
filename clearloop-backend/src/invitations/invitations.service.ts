@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { createHash, randomBytes } from 'crypto';
@@ -57,10 +58,11 @@ export class InvitationsService {
     }
 
     const token = randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const tokenHash = hashToken(token);
 
-    const invitation = this.prisma.invitation.create({
+    // ✅ Fix 1: added await
+    const invitation = await this.prisma.invitation.create({
       data: {
         tenantId,
         email: normalizeEmail,
@@ -77,7 +79,8 @@ export class InvitationsService {
     });
 
     try {
-      const inviter = await this.prisma.user.findUnique({
+      // ✅ Fix 2: query workspaceMember, not user
+      const inviter = await this.prisma.workspaceMember.findUnique({
         where: { id: invitedByMemberId },
         select: { name: true },
       });
@@ -142,10 +145,24 @@ export class InvitationsService {
       });
 
       if (!user) {
+        // New user — create account with provided password
         const passwordHash = await bcrypt.hash(password, 10);
         user = await tx.user.create({
           data: { email: invitation.email, name, passwordHash },
         });
+      } else if (user.passwordHash) {
+        // ✅ Fix 3: passwordHash is now guaranteed string, not null
+        const passwordMatches = await bcrypt.compare(password, user.passwordHash);
+        if (!passwordMatches) {
+          throw new UnauthorizedException(
+            'An account with this email already exists. Enter your existing password to join this workspace.',
+          );
+        }
+      } else {
+        // OAuth-only account — no password set, cannot use password flow
+        throw new BadRequestException(
+          'This account uses Google or GitHub sign-in. Please use the OAuth button to accept this invitation.',
+        );
       }
 
       const member = await tx.workspaceMember.create({
@@ -194,8 +211,6 @@ export class InvitationsService {
       throw new NotFoundException('Invitation not found');
     }
 
-    // Soft-revoke rather than delete, so cancelled invites remain in the
-    // audit trail instead of disappearing entirely.
     await this.prisma.invitation.update({
       where: { id },
       data: {
@@ -223,10 +238,6 @@ export class InvitationsService {
     if (invitation.status === 'ACCEPTED') {
       throw new BadRequestException('Invitation already accepted');
     }
-
-    // We only ever stored a hash of the original token, so the raw token
-    // from the first email is unrecoverable — by design. Resending issues a
-    // brand new token, which invalidates the old email link.
 
     const rawToken = randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
