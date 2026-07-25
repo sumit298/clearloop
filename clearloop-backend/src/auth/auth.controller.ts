@@ -60,9 +60,9 @@ export class AuthController {
         const workspaces = encodeURIComponent(
           JSON.stringify(result.workspaces),
         );
-        const email = encodeURIComponent(req.user.email);
+        const sessionToken = encodeURIComponent(result.sessionToken);
         res.redirect(
-          `${frontendUrl}/auth/select-workspace?email=${email}&workspaces=${workspaces}`,
+          `${frontendUrl}/auth/select-workspace?sessionToken=${sessionToken}&workspaces=${workspaces}`,
         );
         return;
       }
@@ -104,7 +104,6 @@ export class AuthController {
         );
       }
 
-      // Check if workspace selection is required
       if (
         'requiresWorkspaceSelection' in result &&
         result.requiresWorkspaceSelection
@@ -112,9 +111,9 @@ export class AuthController {
         const workspaces = encodeURIComponent(
           JSON.stringify(result.workspaces),
         );
-        const email = encodeURIComponent(req.user.email);
+        const sessionToken = encodeURIComponent(result.sessionToken);
         res.redirect(
-          `${frontendUrl}/auth/select-workspace?email=${email}&workspaces=${workspaces}`,
+          `${frontendUrl}/auth/select-workspace?sessionToken=${sessionToken}&workspaces=${workspaces}`,
         );
         return;
       }
@@ -135,8 +134,9 @@ export class AuthController {
   }
 
   @Post('select-workspace')
-async selectWorkspace(@Body() body: { email: string; workspaceId: string }) {
-  return this.authService.selectWorkspace(body.email, body.workspaceId);
-}
-
+  async selectWorkspace(
+    @Body() body: { sessionToken: string; workspaceId: string },
+  ) {
+    return this.authService.selectWorkspace(body.sessionToken, body.workspaceId);
+  }
 }
