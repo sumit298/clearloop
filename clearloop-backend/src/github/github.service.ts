@@ -635,7 +635,7 @@ export class GithubService {
             where: { id, tenantId },
             select: { featureId: true },
           });
-          return bug?.featureId ?? id;
+          return bug?.featureId ?? null;
         }
       }
     }
