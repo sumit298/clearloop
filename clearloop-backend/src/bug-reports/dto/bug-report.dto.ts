@@ -17,6 +17,12 @@ export class CreateBugReportDto {
   @IsUUID()
   @IsOptional()
   featureId?: string;
+
+  // Required when featureId isn't given — see BugReportsService.createBugReport,
+  // which derives it from the feature when one is set.
+  @IsUUID()
+  @IsOptional()
+  projectId?: string;
 }
 
 export class UpdateBugReportDto {
@@ -39,4 +45,8 @@ export class UpdateBugReportDto {
   @IsUUID()
   @IsOptional()
   featureId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  projectId?: string;
 }

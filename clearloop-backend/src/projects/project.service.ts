@@ -57,6 +57,26 @@ export class ProjectsService {
           orderBy: { createdAt: 'desc' },
           take: 10,
         },
+        bugReports: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            severity: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        },
+        repositories: {
+          select: {
+            id: true,
+            fullName: true,
+            owner: true,
+            name: true,
+            isPrivate: true,
+            webhookActive: true,
+          },
+        },
       },
     });
     if (!project) {

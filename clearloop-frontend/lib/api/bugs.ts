@@ -7,6 +7,7 @@ export interface BugReport {
   severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
   featureId?: string;
+  projectId?: string;
   reportedById: string;
   createdAt: string;
   updatedAt: string;
@@ -19,6 +20,10 @@ export interface BugReport {
       id: string;
       name: string;
     };
+  };
+  project?: {
+    id: string;
+    name: string;
   };
   reportedBy?: {
     id: string;
@@ -42,6 +47,9 @@ export interface CreateBugReportData {
   description: string;
   severity?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   featureId?: string;
+  // Required unless featureId is set — the backend derives the project from
+  // the feature in that case.
+  projectId?: string;
 }
 
 export interface UpdateBugReportData {
@@ -50,13 +58,18 @@ export interface UpdateBugReportData {
   severity?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   status?: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
   featureId?: string;
+  projectId?: string;
+}
+
+export interface BugReportFilters {
+  featureId?: string;
+  projectId?: string;
 }
 
 export const bugsApi = {
   // Get all bug reports
-  getAll: async (featureId?: string): Promise<BugReport[]> => {
-    const params = featureId ? { featureId } : {};
-    const response = await apiClient.get('/bug-reports', { params });
+  getAll: async (filters?: BugReportFilters): Promise<BugReport[]> => {
+    const response = await apiClient.get('/bug-reports', { params: filters ?? {} });
     return response.data;
   },
 

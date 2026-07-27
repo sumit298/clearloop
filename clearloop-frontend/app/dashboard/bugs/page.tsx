@@ -3,21 +3,24 @@
 import { useState } from 'react';
 import { useBugs, useCreateBug } from '@/lib/hooks/useBugs';
 import { useFeatures } from '@/lib/hooks/useFeatures';
+import { useProjects } from '@/lib/hooks/useProjects';
 import Link from 'next/link';
 
 export default function BugsPage() {
   const { data: bugs, isLoading } = useBugs();
-  const { data: features } = useFeatures();
+  const { data: projects } = useProjects();
   const createBug = useCreateBug();
-  
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     severity: "MEDIUM",
     source: "",
+    projectId: "",
     featureId: "",
   });
+  const { data: features } = useFeatures(formData.projectId || undefined);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,16 +29,16 @@ export default function BugsPage() {
       const { source, ...bugData } = formData;
       // Add source to description for now (we can enhance backend later to store source separately)
       const descriptionWithSource = `**Source:** ${source}\n\n${bugData.description}`;
-      
+
       await createBug.mutateAsync({
         ...bugData,
         description: descriptionWithSource,
         featureId: bugData.featureId || undefined,
         severity: bugData.severity as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
       });
-      
+
       setShowCreateModal(false);
-      setFormData({ title: "", description: "", severity: "MEDIUM", source: "", featureId: "" });
+      setFormData({ title: "", description: "", severity: "MEDIUM", source: "", projectId: "", featureId: "" });
     } catch (error) {
       console.error("Failed to create bug:", error);
     }
@@ -204,6 +207,29 @@ export default function BugsPage() {
                 </select>
               </div>
 
+              {/* Project */}
+              <div>
+                <label className="block text-[13px] font-medium text-foreground">
+                  Project <span className="text-danger">*</span>
+                </label>
+                <p className="mt-1 text-[12px] text-text-dim">Every bug needs a project so it shows up on that project's page</p>
+                <select
+                  value={formData.projectId}
+                  onChange={(e) =>
+                    setFormData({ ...formData, projectId: e.target.value, featureId: "" })
+                  }
+                  required
+                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
+                >
+                  <option value="">Select a project</option>
+                  {projects?.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Link to Feature (Optional) */}
               <div>
                 <label className="block text-[13px] font-medium text-foreground">
@@ -213,7 +239,8 @@ export default function BugsPage() {
                 <select
                   value={formData.featureId}
                   onChange={(e) => setFormData({ ...formData, featureId: e.target.value })}
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
+                  disabled={!formData.projectId}
+                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20 disabled:opacity-50"
                 >
                   <option value="">No feature linked</option>
                   {features?.map((feature) => (

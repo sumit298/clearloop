@@ -9,6 +9,8 @@ import type { LoggerService } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GitHubWebhookDto } from './dto/github-webhook.dto';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
+import * as fs from 'fs';
+import * as jwt from 'jsonwebtoken';
 
 @Injectable()
 export class GithubService {
@@ -93,6 +95,10 @@ export class GithubService {
       throw new NotFoundException('Installation not found');
     }
 
+    const uninstalled = await this.uninstallFromGitHub(
+      installation.githubInstallationId,
+    );
+
     // Unlink repositories from projects rather than deleting them outright —
     // preserves the PR/history data those repositories are tied to.
     await this.prisma.gitHubRepository.updateMany({
@@ -105,7 +111,80 @@ export class GithubService {
       data: { status: 'REMOVED' },
     });
 
-    return { message: 'GitHub App disconnected successfully' };
+    return {
+      message: uninstalled
+        ? 'GitHub App disconnected successfully'
+        : 'GitHub App disconnected locally, but it may still be installed on GitHub — please remove it manually from your GitHub account settings if needed',
+    };
+  }
+
+  // Signs a short-lived App JWT (RS256, iss = App ID) per GitHub's app-auth
+  // scheme: https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app
+  private generateAppJwt(): string {
+    const appId = process.env.GITHUB_APP_ID;
+    const privateKeyPath = process.env.GITHUB_APP_PRIVATE_KEY_PATH;
+    if (!appId || !privateKeyPath) {
+      throw new Error('GitHub App ID or private key path is not configured');
+    }
+
+    const privateKey = fs.readFileSync(privateKeyPath, 'utf8');
+    const now = Math.floor(Date.now() / 1000);
+
+    return jwt.sign(
+      {
+        iat: now - 60,
+        exp: now + 9 * 60,
+        iss: appId,
+      },
+      privateKey,
+      { algorithm: 'RS256' },
+    );
+  }
+
+  // Calls GitHub's "Uninstall an app" API so disconnecting in our UI actually
+  // revokes the app's access on the GitHub side, not just locally. Returns
+  // false (rather than throwing) on failure so the caller can still clean up
+  // local state — GitHub access is best treated as revoked-or-manually-fixed,
+  // not something we should get stuck retrying forever.
+  private async uninstallFromGitHub(
+    githubInstallationId: string,
+  ): Promise<boolean> {
+    try {
+      const appJwt = this.generateAppJwt();
+      const response = await fetch(
+        `https://api.github.com/app/installations/${githubInstallationId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${appJwt}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+        },
+      );
+
+      // 404 means GitHub already considers it uninstalled — treat as success.
+      if (!response.ok && response.status !== 404) {
+        const body = await response.text();
+        this.logger.warn(
+          `Failed to uninstall GitHub installation ${githubInstallationId}: ${response.status} ${body}`,
+          'GithubService',
+        );
+        return false;
+      }
+
+      this.logger.log(
+        `Uninstalled GitHub installation ${githubInstallationId} from GitHub`,
+        'GithubService',
+      );
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `Error uninstalling GitHub installation ${githubInstallationId}: ${error instanceof Error ? error.message : error}`,
+        'GithubService',
+      );
+      return false;
+    }
   }
 
   // Explicit link step: attach an already-synced GitHubRepository to a

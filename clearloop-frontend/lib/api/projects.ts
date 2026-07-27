@@ -4,8 +4,39 @@ export interface Project {
   id: string;
   name: string;
   description?: string;
+  key?: string;
   createdAt: string;
   updatedAt: string;
+  // Detail page relations (only present from getById)
+  members?: Array<{
+    id: string;
+    member: {
+      id: string;
+      name: string;
+      email: string;
+      role: string;
+    };
+  }>;
+  features?: Array<{
+    id: string;
+    title: string;
+    status: string;
+    priority: string;
+  }>;
+  bugReports?: Array<{
+    id: string;
+    title: string;
+    status: string;
+    severity: string;
+  }>;
+  repositories?: Array<{
+    id: string;
+    fullName: string;
+    owner: string;
+    name: string;
+    isPrivate: boolean;
+    webhookActive: boolean;
+  }>;
 }
 
 export interface CreateProjectData {
