@@ -11,6 +11,7 @@ import { GitHubWebhookDto } from './dto/github-webhook.dto';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import * as fs from 'fs';
 import * as jwt from 'jsonwebtoken';
+import { AIService } from '../releases/ai.service';
 
 @Injectable()
 export class GithubService {
@@ -18,6 +19,7 @@ export class GithubService {
     private prisma: PrismaService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
+    private readonly aiService: AIService,
   ) {}
 
   // ---------------------------------------------------------------------
@@ -184,6 +186,116 @@ export class GithubService {
         'GithubService',
       );
       return false;
+    }
+  }
+
+  // Exchanges the App JWT for a short-lived installation access token —
+  // required to call the GitHub REST API on behalf of a specific
+  // installation (e.g. reading a private repo's PR diff).
+  private async getInstallationAccessToken(
+    installationRecordId: string,
+  ): Promise<string> {
+    const installation = await this.prisma.gitHubInstallation.findUnique({
+      where: { id: installationRecordId },
+    });
+    if (!installation) {
+      throw new Error(`Installation ${installationRecordId} not found`);
+    }
+
+    const appJwt = this.generateAppJwt();
+    const response = await fetch(
+      `https://api.github.com/app/installations/${installation.githubInstallationId}/access_tokens`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${appJwt}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      },
+    );
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(
+        `Failed to get installation access token: ${response.status} ${body}`,
+      );
+    }
+
+    const data = (await response.json()) as { token: string };
+    return data.token;
+  }
+
+  private async fetchPullRequestDiff(
+    installationRecordId: string,
+    owner: string,
+    repo: string,
+    prNumber: number,
+  ): Promise<string> {
+    const token = await this.getInstallationAccessToken(installationRecordId);
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github.v3.diff',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      },
+    );
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Failed to fetch PR diff: ${response.status} ${body}`);
+    }
+
+    return response.text();
+  }
+
+  // Best-effort, CodeRabbit-style AI review: fetches the PR's diff and saves
+  // a generated summary onto the PR. Called on 'opened' and 'synchronize' so
+  // the summary is available while the PR is still in flight, not just at
+  // merge time when release notes get assembled from it. A failure here
+  // (Gemini down, GitHub API hiccup) must never break webhook processing —
+  // the summary is a nice-to-have, not something the rest of the PR flow
+  // depends on.
+  private async generateAndSaveAiSummary(
+    pullRequestId: string,
+    installationRecordId: string,
+    owner: string,
+    repo: string,
+    prNumber: number,
+    title: string,
+    description: string | null,
+  ): Promise<void> {
+    try {
+      const diff = await this.fetchPullRequestDiff(
+        installationRecordId,
+        owner,
+        repo,
+        prNumber,
+      );
+      const summary = await this.aiService.generateCodeRabbitReview(
+        title,
+        description || '',
+        diff,
+      );
+
+      if (summary) {
+        await this.prisma.pullRequest.update({
+          where: { id: pullRequestId },
+          data: { aiSummary: summary },
+        });
+        this.logger.log(
+          `AI summary generated for PR ${pullRequestId}`,
+          'GithubService',
+        );
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Failed to generate AI summary for PR ${pullRequestId}: ${error instanceof Error ? error.message : error}`,
+        'GithubService',
+      );
     }
   }
 
@@ -437,7 +549,7 @@ export class GithubService {
       return { message: 'PR already exists', pullRequestId: existingPr.id };
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const pullRequest = await tx.pullRequest.create({
         data: {
           tenantId,
@@ -499,6 +611,26 @@ export class GithubService {
         linkedToFeature: !!featureId,
       };
     });
+
+    const repository = await this.prisma.gitHubRepository.findUnique({
+      where: { id: repositoryId },
+    });
+    if (repository) {
+      // Fire-and-forget: the webhook response shouldn't wait on a diff fetch
+      // + Gemini call. generateAndSaveAiSummary already swallows its own
+      // errors, so nothing here can produce an unhandled rejection.
+      void this.generateAndSaveAiSummary(
+        result.pullRequestId,
+        repository.installationId,
+        repository.owner,
+        repository.name,
+        pr.number,
+        pr.title,
+        pr.body,
+      );
+    }
+
+    return result;
   }
 
   private async handlePRClosed(
@@ -516,7 +648,7 @@ export class GithubService {
 
     const status = pr.merged ? 'MERGED' : 'CLOSED';
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await tx.pullRequest.update({
         where: { id: pullRequest.id },
         data: {
@@ -566,6 +698,28 @@ export class GithubService {
         pullRequestId: pullRequest.id,
       };
     });
+
+    // Regenerate on merge too — belt-and-suspenders in case a commit landed
+    // without a prior 'synchronize' webhook, so the summary used for release
+    // notes reflects the final merged diff, not a stale open-time one.
+    if (pr.merged && pullRequest.repositoryId) {
+      const repository = await this.prisma.gitHubRepository.findUnique({
+        where: { id: pullRequest.repositoryId },
+      });
+      if (repository) {
+        void this.generateAndSaveAiSummary(
+          pullRequest.id,
+          repository.installationId,
+          repository.owner,
+          repository.name,
+          pr.number,
+          pr.title,
+          pr.body,
+        );
+      }
+    }
+
+    return result;
   }
 
   private async handlePRReopened(tenantId: string, pr: any) {
@@ -634,6 +788,24 @@ export class GithubService {
         description: pr.body,
       },
     });
+
+    if (pullRequest.repositoryId) {
+      const repository = await this.prisma.gitHubRepository.findUnique({
+        where: { id: pullRequest.repositoryId },
+      });
+      if (repository) {
+        // Refresh the AI summary on new commits, same as CodeRabbit re-reviewing a push.
+        void this.generateAndSaveAiSummary(
+          pullRequest.id,
+          repository.installationId,
+          repository.owner,
+          repository.name,
+          pr.number,
+          pr.title,
+          pr.body,
+        );
+      }
+    }
 
     return { message: 'PR updated', pullRequestId: pullRequest.id };
   }

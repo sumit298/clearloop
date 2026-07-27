@@ -41,14 +41,15 @@ export class ReleaseService {
           status: 'MERGED',
         },
         orderBy: { mergedAt: 'desc' },
+        select: { title: true, aiSummary: true },
       });
 
-      if (prs.length > 0 && prs.some((pr) => pr.aiSummary)) {
-        const summaries = prs
-          .filter((pr) => pr.aiSummary)
-          .map((pr) => pr.aiSummary)
-          .join('\n\n');
-        description = summaries || dto.description;
+      if (prs.length > 0) {
+        const synthesized = await this.aiService.generateReleaseSummary(
+          dto.title,
+          prs,
+        );
+        description = synthesized || dto.description;
       }
     }
     const release = await this.prisma.$transaction(async (tx) => {
@@ -247,20 +248,21 @@ export class ReleaseService {
         mergedAt: { gte: sinceDate },
       },
       orderBy: { mergedAt: 'desc' },
+      select: { title: true, aiSummary: true },
     });
 
     if (prs.length === 0) {
       return { notes: 'No merged PRs found for release notes generation' };
     }
 
-    const summaries = prs
-      .filter((pr) => pr.aiSummary)
-      .map((pr) => pr.aiSummary!)
-      .join('\n\n');
+    const synthesized = await this.aiService.generateReleaseSummary(
+      'this release',
+      prs,
+    );
 
     return {
       notes:
-        summaries || 'No AI summaries available for generating release notes',
+        synthesized || 'No AI summaries available for generating release notes',
     };
   }
 }
