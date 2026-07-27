@@ -1,10 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { bugsApi, CreateBugReportData, UpdateBugReportData } from '../api/bugs';
+import { bugsApi, BugReportFilters, CreateBugReportData, UpdateBugReportData } from '../api/bugs';
 
-export function useBugs(featureId?: string) {
+export function useBugs(filters?: BugReportFilters) {
   return useQuery({
-    queryKey: featureId ? ['bugs', { featureId }] : ['bugs'],
-    queryFn: () => bugsApi.getAll(featureId),
+    queryKey: filters ? ['bugs', filters] : ['bugs'],
+    queryFn: () => bugsApi.getAll(filters),
   });
 }
 

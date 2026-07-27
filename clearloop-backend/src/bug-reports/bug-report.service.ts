@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -10,19 +11,55 @@ import { CreateBugReportDto, UpdateBugReportDto } from './dto/bug-report.dto';
 export class BugReportsService {
   constructor(private prisma: PrismaService) {}
 
+  // Resolves the effective projectId for a bug: when a feature is given, the
+  // feature's project wins (a bug can't belong to a different project than
+  // its own feature); otherwise projectId must be supplied directly, since
+  // BugReport.projectId is how project-less bugs are avoided.
+  private async resolveProjectId(
+    tenantId: string,
+    featureId?: string,
+    projectId?: string,
+  ): Promise<string> {
+    if (featureId) {
+      const feature = await this.prisma.feature.findFirst({
+        where: { id: featureId, tenantId },
+      });
+      if (!feature) {
+        throw new NotFoundException('Feature not found');
+      }
+      if (projectId && projectId !== feature.projectId) {
+        throw new BadRequestException(
+          'projectId does not match the project of the given feature',
+        );
+      }
+      return feature.projectId;
+    }
+
+    if (!projectId) {
+      throw new BadRequestException(
+        'Either projectId or featureId is required',
+      );
+    }
+
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, tenantId },
+    });
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+    return projectId;
+  }
+
   async createBugReport(
     tenantId: string,
     memberId: string,
     dto: CreateBugReportDto,
   ) {
-    if (dto.featureId) {
-      const feature = await this.prisma.feature.findFirst({
-        where: { id: dto.featureId, tenantId },
-      });
-      if (!feature) {
-        throw new NotFoundException('Feature not found');
-      }
-    }
+    const projectId = await this.resolveProjectId(
+      tenantId,
+      dto.featureId,
+      dto.projectId,
+    );
 
     const bugReport = await this.prisma.$transaction(async (tx) => {
       const created = await tx.bugReport.create({
@@ -33,12 +70,19 @@ export class BugReportsService {
           description: dto.description,
           severity: dto.severity || 'MEDIUM',
           featureId: dto.featureId,
+          projectId,
         },
         include: {
           feature: {
             select: {
               id: true,
               title: true,
+            },
+          },
+          project: {
+            select: {
+              id: true,
+              name: true,
             },
           },
           reportedBy: {
@@ -70,17 +114,24 @@ export class BugReportsService {
     return bugReport;
   }
 
-  async findAll(tenantId: string, featureId?: string) {
+  async findAll(tenantId: string, featureId?: string, projectId?: string) {
     return this.prisma.bugReport.findMany({
       where: {
         tenantId,
         ...(featureId && { featureId }),
+        ...(projectId && { projectId }),
       },
       include: {
         feature: {
           select: {
             id: true,
             title: true,
+          },
+        },
+        project: {
+          select: {
+            id: true,
+            name: true,
           },
         },
         reportedBy: {
@@ -113,6 +164,9 @@ export class BugReportsService {
               select: { id: true, name: true },
             },
           },
+        },
+        project: {
+          select: { id: true, name: true },
         },
         reportedBy: {
           select: {
@@ -159,24 +213,27 @@ export class BugReportsService {
       throw new NotFoundException('Bug Report not found');
     }
 
-    // verify feature exists if changing
-    if (dto.featureId) {
-      const feature = await this.prisma.feature.findFirst({
-        where: { id: dto.featureId, tenantId },
-      });
-
-      if (!feature) {
-        throw new NotFoundException('Feature not found');
-      }
+    // Only re-resolve projectId when featureId or projectId is actually
+    // changing — otherwise leave the bug's existing project untouched.
+    let projectId: string | undefined;
+    if (dto.featureId !== undefined || dto.projectId !== undefined) {
+      projectId = await this.resolveProjectId(
+        tenantId,
+        dto.featureId !== undefined ? dto.featureId : (bugReport.featureId ?? undefined),
+        dto.projectId !== undefined ? dto.projectId : (bugReport.projectId ?? undefined),
+      );
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const result = await tx.bugReport.update({
         where: { id },
-        data: dto,
+        data: { ...dto, ...(projectId !== undefined && { projectId }) },
         include: {
           feature: {
             select: { id: true, title: true },
+          },
+          project: {
+            select: { id: true, name: true },
           },
           reportedBy: {
             select: { id: true, name: true, email: true },

@@ -39,8 +39,9 @@ export class BugReportsController {
   findAll(
     @Request() req: AuthenticatedRequest,
     @Query('featureId') featureId?: string,
+    @Query('projectId') projectId?: string,
   ) {
-    return this.bugReportsService.findAll(req.tenantId, featureId);
+    return this.bugReportsService.findAll(req.tenantId, featureId, projectId);
   }
 
   @Get(':id')
