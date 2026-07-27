@@ -1,19 +1,22 @@
 "use client";
 
-import { useState } from 'react';
-import { useProjects, useCreateProject, useDeleteProject } from '@/lib/hooks/useProjects';
+import { useState } from "react";
+import {
+  useProjects,
+  useCreateProject,
+  useDeleteProject,
+} from "@/lib/hooks/useProjects";
 import Link from "next/link";
 
 export default function ProjectsPage() {
   const { data: projects, isLoading } = useProjects();
   const createProject = useCreateProject();
   const deleteProject = useDeleteProject();
-  
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
-    githubRepoUrl: "",
   });
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -22,7 +25,7 @@ export default function ProjectsPage() {
     try {
       await createProject.mutateAsync(formData);
       setShowCreateModal(false);
-      setFormData({ name: "", description: "", githubRepoUrl: "" });
+      setFormData({ name: "", description: "" });
     } catch (error) {
       console.error("Failed to create project:", error);
     }
@@ -77,14 +80,6 @@ export default function ProjectsPage() {
                   {project.description}
                 </p>
               )}
-              {project.githubRepoUrl && (
-                <div className="mt-4 flex items-center gap-2 text-[12px] text-text-muted">
-                  <span>⚡</span>
-                  <span className="truncate">
-                    {project.githubRepoUrl.replace("https://github.com/", "")}
-                  </span>
-                </div>
-              )}
             </Link>
           ))}
         </div>
@@ -123,20 +118,7 @@ export default function ProjectsPage() {
                   className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
                 />
               </div>
-              <div>
-                <label className="block text-[13px] font-medium text-foreground">
-                  GitHub Repository URL
-                </label>
-                <input
-                  type="url"
-                  value={formData.githubRepoUrl}
-                  onChange={(e) =>
-                    setFormData({ ...formData, githubRepoUrl: e.target.value })
-                  }
-                  placeholder="https://github.com/user/repo"
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
-                />
-              </div>
+
               <div className="flex gap-3">
                 <button
                   type="button"

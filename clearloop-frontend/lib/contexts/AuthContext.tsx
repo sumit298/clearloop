@@ -1,7 +1,9 @@
-'use client';
+"use client";
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { authApi } from '../api/auth';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { authApi } from "../api/auth";
+import { useQueryClient } from "@tanstack/react-query";
+import { workspaceApi } from "../api/workspace";
 
 interface User {
   id: string;
@@ -26,12 +28,13 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (token: string) => Promise<void>;
   logout: () => void;
-  setWorkspace: (workspace: Workspace) => void;
+  switchWorkspace: (tenantId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [workspace, setWorkspaceState] = useState<Workspace | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -40,31 +43,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const loadAuthState = async () => {
       try {
-        const storedToken = localStorage.getItem('token');
-        const storedUser = localStorage.getItem('user');
-        const storedWorkspace = localStorage.getItem('workspace');
+        const storedToken = localStorage.getItem("token");
 
         if (storedToken) {
           setToken(storedToken);
-          
-          if (storedUser) {
-            setUser(JSON.parse(storedUser));
-          }
-          
-          if (storedWorkspace) {
-            setWorkspaceState(JSON.parse(storedWorkspace));
-          }
-
           try {
-            const userData = await authApi.getCurrentUser();
+            const [userData, workspaceData] = await Promise.all([
+              authApi.getCurrentUser(),
+              workspaceApi.getCurrent(),
+            ]);
             setUser(userData);
-            localStorage.setItem('user', JSON.stringify(userData));
+            setWorkspaceState(workspaceData);
           } catch (error) {
             logout();
           }
         }
       } catch (error) {
-        console.error('Failed to load auth state:', error);
+        console.error("Failed to load auth state:", error);
       } finally {
         setIsLoading(false);
       }
@@ -75,14 +70,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (newToken: string) => {
     setToken(newToken);
-    localStorage.setItem('token', newToken);
+    localStorage.setItem("token", newToken);
 
     try {
-      const userData = await authApi.getCurrentUser();
+      const [userData, workspaceData] = await Promise.all([
+        authApi.getCurrentUser(),
+        workspaceApi.getCurrent(),
+      ]);
       setUser(userData);
-      localStorage.setItem('user', JSON.stringify(userData));
+      setWorkspaceState(workspaceData);
     } catch (error) {
-      console.error('Failed to fetch user data:', error);
+      console.error("Failed to fetch user data:", error);
       throw error;
     }
   };
@@ -91,14 +89,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setWorkspaceState(null);
     setToken(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('workspace');
+    localStorage.removeItem("token");
+    localStorage.removeItem("workspace");
+    queryClient.clear();
   };
 
-  const setWorkspace = (ws: Workspace) => {
-    setWorkspaceState(ws);
-    localStorage.setItem('workspace', JSON.stringify(ws));
+  const switchWorkspace = async (tenantId: string) => {
+    const response = await authApi.switchWorkspace(tenantId);
+    queryClient.clear();
+    await login(response.access_token);
   };
 
   const value: AuthContextType = {
@@ -109,7 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isAuthenticated: !!user && !!token,
     login,
     logout,
-    setWorkspace,
+    switchWorkspace,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -118,7 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }

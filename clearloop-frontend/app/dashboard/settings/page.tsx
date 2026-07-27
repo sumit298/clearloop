@@ -37,7 +37,7 @@ export default function SettingsPage() {
     githubApi.connectGitHub();
   };
 
-  const handleDisconnectGitHub = async () => {
+  const handleDisconnectGitHub = async (installationId: string) => {
     if (
       !confirm(
         "Are you sure you want to disconnect GitHub? This will stop automatic PR linking.",
@@ -47,7 +47,7 @@ export default function SettingsPage() {
     }
 
     try {
-      await disconnectGitHub.mutateAsync();
+      await disconnectGitHub.mutateAsync(installationId);
       setSuccess("GitHub App disconnected successfully");
     } catch (err: any) {
       setError(err.response?.data?.message || "Failed to disconnect GitHub");
@@ -77,7 +77,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="p-8">
+     <div className="p-8">
       <div className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight">
           Workspace Settings
@@ -187,51 +187,66 @@ export default function SettingsPage() {
               </div>
             </div>
           ) : (
-            <div className="mt-6">
-              <div className="rounded-lg border border-success/30 bg-success/10 p-4">
-                <h3 className="text-[14px] font-medium text-success">
-                  ✓ GitHub App Connected
-                </h3>
-                <a
-                  href={`https://github.com/settings/installations/${githubInstallation.installationId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-6 block w-full rounded-lg bg-primary px-4 py-3 text-center text-[14px] font-medium text-foreground transition-colors hover:bg-primary-hover"
-                >
-                  Manage Repositories
-                </a>
-                <p className="mt-2 text-[13px] text-text-muted">
-                  All PRs in connected repos will automatically link to features
-                  and bugs based on branch names.
-                </p>
-              </div>
-
-              {githubInstallation.projects &&
-                githubInstallation.projects.length > 0 && (
-                  <div className="mt-4">
-                    <h3 className="text-[13px] font-medium text-foreground">
-                      Connected Repositories (
-                      {githubInstallation.projects.length})
+            <div className="mt-6 space-y-6">
+              {(githubInstallation.installations ?? []).map((installation) => (
+                <div key={installation.id}>
+                  <div className="rounded-lg border border-success/30 bg-success/10 p-4">
+                    <h3 className="text-[14px] font-medium text-success">
+                      ✓ GitHub App Connected
+                      {installation.accountLogin ? ` — ${installation.accountLogin}` : ""}
                     </h3>
-                    <div className="mt-2 space-y-2">
-                      {githubInstallation.projects.map((project) => (
-                        <div
-                          key={project.id}
-                          className="rounded-lg border border-border bg-background p-3"
-                        >
-                          <p className="text-[13px] font-medium text-foreground">
-                            {project.name}
-                          </p>
-                          <p className="mt-1 text-[12px] text-text-dim">
-                            {project.githubRepoUrl}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
+                    <a
+                      href={`https://github.com/settings/installations/${installation.githubInstallationId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-6 block w-full rounded-lg bg-primary px-4 py-3 text-center text-[14px] font-medium text-foreground transition-colors hover:bg-primary-hover"
+                    >
+                      Manage Repositories
+                    </a>
+                    <p className="mt-2 text-[13px] text-text-muted">
+                      All PRs in connected repos will automatically link to features
+                      and bugs based on branch names.
+                    </p>
                   </div>
-                )}
 
-              <div className="mt-4 rounded-lg border border-border bg-background p-4">
+                  {installation.repositories.length > 0 && (
+                    <div className="mt-4">
+                      <h3 className="text-[13px] font-medium text-foreground">
+                        Repositories ({installation.repositories.length})
+                      </h3>
+                      <div className="mt-2 space-y-2">
+                        {installation.repositories.map((repo) => (
+                          <div
+                            key={repo.id}
+                            className="rounded-lg border border-border bg-background p-3"
+                          >
+                            <p className="text-[13px] font-medium text-foreground">
+                              {repo.fullName}
+                            </p>
+                            <p className="mt-1 text-[12px] text-text-dim">
+                              {repo.projectId ? "Linked to a project" : "Not linked to a project"}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {isAdmin && (
+                    <button
+                      onClick={() => handleDisconnectGitHub(installation.id)}
+                      disabled={disconnectGitHub.isPending}
+                      className="mt-6 w-full rounded-lg border border-danger bg-danger/10 px-4 py-3 text-[14px] font-medium text-danger transition-colors hover:bg-danger/20 disabled:opacity-50"
+                    >
+                      {disconnectGitHub.isPending
+                        ? "Disconnecting..."
+                        : "Disconnect GitHub App"}
+                    </button>
+                  )}
+                </div>
+              ))}
+
+              <div className="rounded-lg border border-border bg-background p-4">
                 <h3 className="text-[13px] font-medium text-foreground">
                   Branch Naming Patterns
                 </h3>
@@ -254,18 +269,6 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
-
-              {isAdmin && (
-                <button
-                  onClick={handleDisconnectGitHub}
-                  disabled={disconnectGitHub.isPending}
-                  className="mt-6 w-full rounded-lg border border-danger bg-danger/10 px-4 py-3 text-[14px] font-medium text-danger transition-colors hover:bg-danger/20 disabled:opacity-50"
-                >
-                  {disconnectGitHub.isPending
-                    ? "Disconnecting..."
-                    : "Disconnect GitHub App"}
-                </button>
-              )}
             </div>
           )}
         </div>

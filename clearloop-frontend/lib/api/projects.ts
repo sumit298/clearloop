@@ -4,9 +4,6 @@ export interface Project {
   id: string;
   name: string;
   description?: string;
-  githubRepoUrl?: string;
-  githubRepoId?: string;
-  githubInstallationId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -14,13 +11,11 @@ export interface Project {
 export interface CreateProjectData {
   name: string;
   description?: string;
-  githubRepoUrl?: string;
 }
 
 export interface UpdateProjectData {
   name?: string;
   description?: string;
-  githubRepoUrl?: string;
 }
 
 export const projectsApi = {
@@ -54,12 +49,12 @@ export const projectsApi = {
   },
 
   // Add member to project
-  addMember: async (id: string, userId: string): Promise<void> => {
-    await apiClient.post(`/projects/${id}/members`, { userId });
+  addMember: async (id: string, memberId: string): Promise<void> => {
+    await apiClient.post(`/projects/${id}/members`, { memberId });
   },
 
   // Remove member from project
-  removeMember: async (id: string, userId: string): Promise<void> => {
-    await apiClient.delete(`/projects/${id}/members/${userId}`);
+  removeMember: async (id: string, memberId: string): Promise<void> => {
+    await apiClient.delete(`/projects/${id}/members/${memberId}`);
   },
 };
