@@ -188,7 +188,7 @@ export default function SettingsPage() {
             </div>
           ) : (
             <div className="mt-6 space-y-6">
-              {githubInstallation.installations.map((installation) => (
+              {(githubInstallation.installations ?? []).map((installation) => (
                 <div key={installation.id}>
                   <div className="rounded-lg border border-success/30 bg-success/10 p-4">
                     <h3 className="text-[14px] font-medium text-success">

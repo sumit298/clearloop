@@ -11,7 +11,6 @@ export interface WorkspaceSummary {
   id: string;
   name: string;
   slug: string;
-  plan: string;
   role: string;
   isCurrent: boolean;
 }

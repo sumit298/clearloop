@@ -24,7 +24,7 @@ function SelectWorkspaceContent() {
     }
 
     try {
-      const parsedWorkspaces = JSON.parse(decodeURIComponent(workspacesParam));
+      const parsedWorkspaces = JSON.parse(workspacesParam);
       setSessionToken(tokenParam)
       setWorkspaces(parsedWorkspaces);
       
