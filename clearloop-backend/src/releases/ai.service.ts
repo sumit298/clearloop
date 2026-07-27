@@ -39,7 +39,7 @@ ${diff.substring(0, 5000)}
 
     try {
       const response = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash', // Fast and accurate for structured categorization
+        model: 'gemini-3.1-flash-lite', // Fast and accurate for structured categorization
         contents: prompt,
         config: {
           systemInstruction: `You are an expert release engineer mimicking CodeRabbit. Categorize changes precisely into:
