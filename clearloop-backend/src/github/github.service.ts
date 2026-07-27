@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GitHubWebhookDto } from './dto/github-webhook.dto';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import * as fs from 'fs';
+import * as path from 'path';
 import * as jwt from 'jsonwebtoken';
 import { AIService } from '../releases/ai.service';
 
@@ -129,7 +130,18 @@ export class GithubService {
       throw new Error('GitHub App ID or private key path is not configured');
     }
 
-    const privateKey = fs.readFileSync(privateKeyPath, 'utf8');
+    // Resolved explicitly (rather than left to fs's implicit cwd lookup) so a
+    // missing-file error names the exact absolute path it looked for —
+    // a bare ENOENT on the raw relative path gives no way to tell a missing
+    // file apart from a process running with an unexpected cwd.
+    const resolvedPath = path.resolve(process.cwd(), privateKeyPath);
+    if (!fs.existsSync(resolvedPath)) {
+      throw new Error(
+        `GitHub App private key not found at ${resolvedPath} (GITHUB_APP_PRIVATE_KEY_PATH=${privateKeyPath}, cwd=${process.cwd()})`,
+      );
+    }
+
+    const privateKey = fs.readFileSync(resolvedPath, 'utf8');
     const now = Math.floor(Date.now() / 1000);
 
     return jwt.sign(
