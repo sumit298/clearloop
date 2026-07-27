@@ -233,16 +233,32 @@ export class GithubService {
     prNumber: number,
   ): Promise<string> {
     const token = await this.getInstallationAccessToken(installationRecordId);
-    const response = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github.v3.diff',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-      },
+
+    const ownerPattern = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+    const repoPattern = /^[A-Za-z0-9._-]{1,100}$/;
+    if (!ownerPattern.test(owner)) {
+      throw new BadRequestException('Invalid repository owner');
+    }
+
+    if (!repoPattern.test(repo)) {
+      throw new BadRequestException('Invalid repository name');
+    }
+
+    if (!Number.isInteger(prNumber) || prNumber <= 0) {
+      throw new BadRequestException('Invalid PR number');
+    }
+
+    const url = new URL(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${prNumber}`,
+      'https://api.github.com',
     );
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.v3.diff',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    });
 
     if (!response.ok) {
       const body = await response.text();
@@ -563,7 +579,7 @@ export class GithubService {
           branchName: pr.head.ref,
           baseBranch: pr.base?.ref,
           headBranch: pr.head.ref,
-          author: pr.user.login ?? "Unknown",
+          author: pr.user.login ?? 'Unknown',
           authorGithubLogin: pr.user.login ?? 'Unknown',
           isDraft: !!pr.draft,
           status: 'OPEN',
