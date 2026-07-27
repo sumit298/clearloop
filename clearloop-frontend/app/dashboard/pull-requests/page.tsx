@@ -160,6 +160,18 @@ export default function PullRequestsPage() {
                         )}
                       </div>
                       
+                      {/* AI Review */}
+                      {pr.aiSummary && (
+                        <details className="mt-3 rounded-lg border border-border bg-background">
+                          <summary className="cursor-pointer px-3 py-2 text-[12px] font-medium text-text-muted hover:text-foreground">
+                            🤖 AI Review
+                          </summary>
+                          <div className="border-t border-border px-3 py-2 text-[13px] text-foreground whitespace-pre-wrap">
+                            {pr.aiSummary}
+                          </div>
+                        </details>
+                      )}
+
                       {/* Linked Feature */}
                       {pr.feature ? (
                         <div className="mt-3 flex items-center gap-2">
