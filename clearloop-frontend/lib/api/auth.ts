@@ -7,6 +7,15 @@ export interface RegisterData {
   companyName: string;
 }
 
+export interface WorkspaceSummary {
+  id: string;
+  name: string;
+  slug: string;
+  plan: string;
+  role: string;
+  isCurrent: boolean;
+}
+
 export interface LoginData {
   email: string;
   password: string;
@@ -15,6 +24,7 @@ export interface LoginData {
 export interface AuthResponse {
   access_token: string;
   requiresWorkspaceSelection?: boolean;
+  sessionToken: string;
   workspaces?: Array<{
     id: string;
     name: string;
@@ -42,12 +52,24 @@ export const authApi = {
   },
   // Select workspace for multi-tenant users
   selectWorkspace: async (
-    email: string,
+    sessionToken: string,
     workspaceId: string,
   ): Promise<AuthResponse> => {
     const response = await apiClient.post("/auth/select-workspace", {
-      email,
+      sessionToken,
       workspaceId,
+    });
+    return response.data;
+  },
+
+  getWorkspaces: async (): Promise<WorkspaceSummary[]> => {
+    const response = await apiClient.get("/auth/my-workspaces");
+    return response.data;
+  },
+
+  switchWorkspace: async (tenantId: string): Promise<AuthResponse> => {
+    const response = await apiClient.post("/auth/switch-workspace", {
+      tenantId,
     });
     return response.data;
   },

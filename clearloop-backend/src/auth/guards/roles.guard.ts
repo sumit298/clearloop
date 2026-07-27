@@ -38,7 +38,7 @@ export class RolesGuard implements CanActivate {
 
     if (allowSelf) {
       const resourceUserId = request.params.id;
-      if (resourceUserId === user.userId) {
+      if (resourceUserId === user.memberId) {
         return true;
       }
     }

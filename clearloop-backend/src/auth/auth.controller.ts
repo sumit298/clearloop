@@ -14,7 +14,8 @@ import { RegisterDto, LoginDto } from './dto/auth.dto';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { GithubAuthGuard } from './guards/github-auth.guard';
 import { ConfigService } from '@nestjs/config';
-
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import type { AuthenticatedRequest } from '../common/interfaces/authenticated-request.interface';
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -137,6 +138,24 @@ export class AuthController {
   async selectWorkspace(
     @Body() body: { sessionToken: string; workspaceId: string },
   ) {
-    return this.authService.selectWorkspace(body.sessionToken, body.workspaceId);
+    return this.authService.selectWorkspace(
+      body.sessionToken,
+      body.workspaceId,
+    );
+  }
+
+  @Get('my-workspaces')
+  @UseGuards(JwtAuthGuard)
+  getMyWorkspaces(@Req() req: AuthenticatedRequest) {
+    return this.authService.getMyWorkspaces(req.user.userId, req.user.tenantId);
+  }
+
+  @Post('switch-workspace')
+  @UseGuards(JwtAuthGuard)
+  switchWorkspace(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: { tenantId: string },
+  ) {
+    return this.authService.switchWorkspace(req.user.userId, body.tenantId);
   }
 }

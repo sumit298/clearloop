@@ -216,6 +216,43 @@ export class AuthService {
     });
   }
 
+  async getMyWorkspaces(userId: string, currentTenantId: string) {
+    const memberships = await this.prisma.workspaceMember.findMany({
+      where: { userId, isActive: true },
+      include: {
+        tenant: { select: { id: true, name: true, slug: true } },
+      },
+    });
+
+    const workspaces = memberships.map((membership) => ({
+      id: membership.tenant.id,
+      name: membership.tenant.name,
+      slug: membership.tenant.slug,
+      role: membership.role,
+      isCurrent: membership.tenant.id === currentTenantId,
+    }));
+
+    return workspaces;
+  }
+
+  async switchWorkspace(userId: string, tenantId: string) {
+    const member = await this.prisma.workspaceMember.findUnique({
+      where: { userId_tenantId: { userId, tenantId } },
+    });
+
+    if (!member || !member.isActive) {
+      throw new UnauthorizedException('Not a member of this workspace');
+    }
+
+    return this.signToken({
+      userId,
+      memberId: member.id,
+      tenantId,
+      role: member.role,
+      tokenVersion: member.tokenVersion,
+    });
+  }
+
   // ---------------------------------------------------------------------
   // OAuth (Google / GitHub)
   // ---------------------------------------------------------------------

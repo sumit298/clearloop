@@ -11,6 +11,7 @@ export default function SignIn() {
   const router = useRouter();
   const { login: authLogin } = useAuth();
   const [email, setEmail] = useState("");
+  const [sessionToken, setSessionToken] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -29,6 +30,7 @@ export default function SignIn() {
       // Check if user belongs to multiple workspaces
       if (response.requiresWorkspaceSelection && response.workspaces) {
         setWorkspaces(response.workspaces);
+        setSessionToken(response.sessionToken!);
         setLoading(false);
         return;
       }
@@ -52,12 +54,14 @@ export default function SignIn() {
   }) => {
     setLoading(true);
     try {
-      // For now, just use the first workspace's token
-      // In production, you'd need a separate endpoint to get token for selected workspace
-      await authLogin(workspace.id); // This needs backend support
+      const response = await authApi.selectWorkspace(
+        sessionToken,
+        workspace.id,
+      );
+      await authLogin(response.access_token);
       router.push("/dashboard");
     } catch (err: any) {
-      setError("Failed to select workspace");
+      setError(err.response?.data?.message || "Failed to select workspace");
     } finally {
       setLoading(false);
     }
@@ -77,7 +81,7 @@ export default function SignIn() {
 
         {/* Form Content */}
         <div className="flex flex-1 items-center justify-center px-8 py-12">
-          <div className="w-full max-w-[380px]">
+          <div className="w-full max-w-95">
             {workspaces.length > 0 ? (
               // Workspace selection
               <div>
@@ -194,10 +198,12 @@ export default function SignIn() {
                 </div>
 
                 <div className="mt-6 grid grid-cols-2 gap-3">
-                  <button 
+                  <button
                     type="button"
                     onClick={() => {
-                      const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:8000';
+                      const apiUrl =
+                        process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+                        "http://localhost:8000";
                       window.location.href = `${apiUrl}/auth/github`;
                     }}
                     className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-surface-2"
@@ -211,10 +217,12 @@ export default function SignIn() {
                     </svg>
                     GitHub
                   </button>
-                  <button 
+                  <button
                     type="button"
                     onClick={() => {
-                      const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:8000';
+                      const apiUrl =
+                        process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+                        "http://localhost:8000";
                       window.location.href = `${apiUrl}/auth/google`;
                     }}
                     className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-surface-2"
@@ -262,11 +270,11 @@ export default function SignIn() {
 
       {/* Right Side - Visual */}
       <div className="hidden lg:flex lg:w-[55%] lg:flex-col">
-        <div className="relative flex flex-1 items-center justify-center overflow-hidden border-l border-border bg-gradient-to-br from-surface via-background to-background p-16">
+        <div className="relative flex flex-1 items-center justify-center overflow-hidden border-l border-border bg-linear-to-br from-surface via-background to-background p-16">
           {/* Animated circles */}
           <div className="absolute inset-0 overflow-hidden">
-            <div className="absolute left-1/4 top-1/4 h-[500px] w-[500px] rounded-full bg-primary/5 blur-3xl" />
-            <div className="absolute right-1/4 bottom-1/4 h-[400px] w-[400px] rounded-full bg-primary-soft/5 blur-3xl" />
+            <div className="absolute left-1/4 top-1/4 h-125 w-125 rounded-full bg-primary/5 blur-3xl" />
+            <div className="absolute right-1/4 bottom-1/4 h-100 w-100 rounded-full bg-primary-soft/5 blur-3xl" />
           </div>
 
           {/* Grid overlay */}
