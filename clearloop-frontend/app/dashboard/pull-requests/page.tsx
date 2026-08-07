@@ -1,285 +1,157 @@
 "use client";
 
-import { useState } from 'react';
-import { usePullRequests, useLinkPRToFeature, useUnlinkPRFromFeature } from '@/lib/hooks/usePullRequests';
-import { useFeatures } from '@/lib/hooks/useFeatures';
-import Link from 'next/link';
+import { useState } from "react";
+import Link from "next/link";
+import { ExternalLink, GitPullRequest, Link2, Sparkles } from "lucide-react";
+import { PageHeader, EmptyState } from "@/components/clearloop/primitives";
+import { Toolbar, SearchField, FilterMenu, ResultCount } from "@/components/clearloop/toolbar";
+import { PrStatusChip, toneColor } from "@/components/clearloop/status";
+import { useFeatures } from "@/lib/hooks/useFeatures";
+import { useLinkPRToFeature, usePullRequests, useUnlinkPRFromFeature } from "@/lib/hooks/usePullRequests";
+
+const STATE_OPTIONS = [
+  { value: "OPEN", label: "Open", color: toneColor("green") },
+  { value: "MERGED", label: "Merged", color: toneColor("violet") },
+  { value: "CLOSED", label: "Closed", color: toneColor("red") },
+];
 
 export default function PullRequestsPage() {
   const { data: pullRequests, isLoading } = usePullRequests();
   const { data: features } = useFeatures();
-  const linkPR = useLinkPRToFeature();
-  const unlinkPR = useUnlinkPRFromFeature();
-  
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [showLinkModal, setShowLinkModal] = useState(false);
-  const [selectedPR, setSelectedPR] = useState<string | null>(null);
-  const [selectedFeatureId, setSelectedFeatureId] = useState('');
+  const linkMutation = useLinkPRToFeature();
+  const unlinkMutation = useUnlinkPRFromFeature();
 
-  const filteredPRs = pullRequests?.filter(pr => {
-    if (statusFilter === 'ALL') return true;
-    return pr.status === statusFilter;
-  });
+  const [q, setQ] = useState("");
+  const [stateFilter, setStateFilter] = useState<string[]>([]);
+  const [prId, setPrId] = useState<string | null>(null);
+  const [featureId, setFeatureId] = useState("");
 
-  const handleLinkClick = (prId: string) => {
-    setSelectedPR(prId);
-    setShowLinkModal(true);
-  };
+  const rows = (pullRequests || [])
+    .filter((pr) => q ? pr.title.toLowerCase().includes(q.toLowerCase()) : true)
+    .filter((pr) => stateFilter.length ? stateFilter.includes(pr.status) : true);
 
   const handleLink = async () => {
-    if (!selectedPR || !selectedFeatureId) return;
-
-    try {
-      await linkPR.mutateAsync({ prId: selectedPR, featureId: selectedFeatureId });
-      setShowLinkModal(false);
-      setSelectedPR(null);
-      setSelectedFeatureId('');
-    } catch (error) {
-      console.error('Failed to link PR:', error);
-    }
+    if (!prId || !featureId) return;
+    try { await linkMutation.mutateAsync({ prId, featureId }); setPrId(null); setFeatureId(""); }
+    catch { /* mutation state retains API error */ }
   };
 
-  const handleUnlink = async (prId: string) => {
-    if (!confirm('Are you sure you want to unlink this PR?')) return;
-
-    try {
-      await unlinkPR.mutateAsync(prId);
-    } catch (error) {
-      console.error('Failed to unlink PR:', error);
-    }
+  const handleUnlink = async (id: string) => {
+    if (window.confirm("Unlink this pull request from its feature?")) await unlinkMutation.mutateAsync(id);
   };
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-text-muted">Loading...</div>
-      </div>
-    );
-  }
+  if (isLoading) return <div className="flex h-full items-center justify-center text-[13px] text-muted-foreground">Loading pull requests…</div>;
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Pull Requests</h1>
-          <p className="mt-2 text-[15px] text-text-dim">
-            Auto-linked from GitHub webhook
-          </p>
-        </div>
-      </div>
+    <>
+      <PageHeader
+        eyebrow="GitHub sync"
+        title="Pull requests"
+        description="Mirrored from GitHub within seconds, linked to the work they deliver."
+      />
 
-      {/* Filters */}
-      <div className="mb-6 flex items-center gap-3">
-        <button
-          onClick={() => setStatusFilter('ALL')}
-          className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors ${
-            statusFilter === 'ALL'
-              ? 'bg-primary/10 text-primary-soft'
-              : 'bg-surface-2 text-text-muted hover:bg-surface'
-          }`}
-        >
-          All ({pullRequests?.length || 0})
-        </button>
-        <button
-          onClick={() => setStatusFilter('OPEN')}
-          className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors ${
-            statusFilter === 'OPEN'
-              ? 'bg-primary/10 text-primary-soft'
-              : 'bg-surface-2 text-text-muted hover:bg-surface'
-          }`}
-        >
-          Open ({pullRequests?.filter(pr => pr.status === 'OPEN').length || 0})
-        </button>
-        <button
-          onClick={() => setStatusFilter('MERGED')}
-          className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors ${
-            statusFilter === 'MERGED'
-              ? 'bg-primary/10 text-primary-soft'
-              : 'bg-surface-2 text-text-muted hover:bg-surface'
-          }`}
-        >
-          Merged ({pullRequests?.filter(pr => pr.status === 'MERGED').length || 0})
-        </button>
-        <button
-          onClick={() => setStatusFilter('CLOSED')}
-          className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors ${
-            statusFilter === 'CLOSED'
-              ? 'bg-primary/10 text-primary-soft'
-              : 'bg-surface-2 text-text-muted hover:bg-surface'
-          }`}
-        >
-          Closed ({pullRequests?.filter(pr => pr.status === 'CLOSED').length || 0})
-        </button>
-      </div>
+      <Toolbar>
+        <SearchField value={q} onChange={setQ} placeholder="Search pull requests…" />
+        <FilterMenu
+          label="State"
+          selected={stateFilter}
+          onToggle={(v) => setStateFilter((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])}
+          options={STATE_OPTIONS}
+        />
+        <ResultCount count={rows.length} noun="pull request" />
+      </Toolbar>
 
-      {!filteredPRs || filteredPRs.length === 0 ? (
-        <div className="rounded-xl border border-border bg-surface p-12 text-center">
-          <p className="text-text-muted">
-            {statusFilter === 'ALL' ? 'No pull requests yet' : `No ${statusFilter.toLowerCase()} pull requests`}
-          </p>
-          <p className="mt-2 text-[13px] text-text-dim">
-            PRs will appear here automatically when GitHub webhook is configured
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filteredPRs.map((pr) => (
-            <div
-              key={pr.id}
-              className="rounded-lg border border-border bg-surface p-4"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1">
-                      <h3 className="font-medium text-foreground">{pr.title}</h3>
-                      {pr.description && (
-                        <p className="mt-1 text-[13px] text-text-muted line-clamp-2">
-                          {pr.description}
-                        </p>
-                      )}
-                      <div className="mt-2 flex items-center gap-3 text-[12px] text-text-dim">
-                        <span>by {pr.author}</span>
-                        <span>•</span>
-                        <span>{formatDate(pr.createdAt)}</span>
-                        {pr.mergedAt && (
-                          <>
-                            <span>•</span>
-                            <span>Merged {formatDate(pr.mergedAt)}</span>
-                          </>
-                        )}
-                      </div>
-                      
-                      {/* AI Review */}
-                      {pr.aiSummary && (
-                        <details className="mt-3 rounded-lg border border-border bg-background">
-                          <summary className="cursor-pointer px-3 py-2 text-[12px] font-medium text-text-muted hover:text-foreground">
-                            🤖 AI Review
-                          </summary>
-                          <div className="border-t border-border px-3 py-2 text-[13px] text-foreground whitespace-pre-wrap">
-                            {pr.aiSummary}
-                          </div>
-                        </details>
-                      )}
+      <div className="p-6">
+        {rows.length === 0 ? (
+          <div className="panel">
+            <EmptyState
+              icon={GitPullRequest}
+              title="No pull requests here"
+              description="Nothing matches this filter. Open PRs appear the moment GitHub sends the webhook."
+              action={
+                <button onClick={() => { setQ(""); setStateFilter([]); }} className="inline-flex h-8 items-center rounded-md border border-border px-3 text-[12px]">
+                  Clear filters
+                </button>
+              }
+            />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {rows.map((pr) => (
+              <div key={pr.id} className="panel lift overflow-hidden">
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <GitPullRequest
+                    className={`size-4 shrink-0 ${
+                      pr.status === "MERGED" ? "text-[var(--hue-violet)]"
+                      : pr.status === "OPEN" ? "text-[var(--hue-green)]"
+                      : "text-muted-foreground"
+                    }`}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium">{pr.title}</span>
+                  {pr.feature && (
+                    <span className="hidden shrink-0 rounded border border-border px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground lg:block">
+                      {pr.feature.title}
+                    </span>
+                  )}
+                  <PrStatusChip status={pr.status} />
+                </div>
 
-                      {/* Linked Feature */}
+                <div className="border-t border-border bg-surface-raised px-4 py-2.5">
+                  {pr.aiSummary && (
+                    <p className="text-[12px] leading-relaxed text-muted-foreground">
+                      <Sparkles className="mr-1.5 -mt-0.5 inline size-3 text-primary" />
+                      {pr.aiSummary}
+                    </p>
+                  )}
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <span className="font-mono text-[12px] text-muted-foreground">by {pr.author}</span>
+                    {pr.branchName && <span className="font-mono text-[12px] text-muted-foreground">{pr.branchName}</span>}
+                    <span className="font-mono text-[12px] text-muted-foreground">{new Date(pr.createdAt).toLocaleDateString()}</span>
+                    <div className="ml-auto flex items-center gap-2">
                       {pr.feature ? (
-                        <div className="mt-3 flex items-center gap-2">
-                          <Link
-                            href={`/dashboard/features/${pr.feature.id}`}
-                            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-[12px] text-foreground transition-colors hover:bg-surface-2"
-                          >
-                            <span>🔗</span>
-                            <span>{pr.feature.title}</span>
+                        <>
+                          <Link href={`/dashboard/features/${pr.feature.id}`} className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[11px] hover:bg-surface-raised">
+                            <Link2 className="size-3 text-primary" />{pr.feature.title}
                           </Link>
-                          <button
-                            onClick={() => handleUnlink(pr.id)}
-                            disabled={unlinkPR.isPending}
-                            className="text-[12px] text-danger hover:underline disabled:opacity-50"
-                          >
+                          <button onClick={() => handleUnlink(pr.id)} disabled={unlinkMutation.isPending} className="text-[11px] text-destructive hover:underline disabled:opacity-50">
                             Unlink
                           </button>
-                        </div>
+                        </>
                       ) : (
-                        <button
-                          onClick={() => handleLinkClick(pr.id)}
-                          className="mt-3 inline-flex items-center gap-2 rounded-lg border border-dashed border-border bg-background px-3 py-1.5 text-[12px] text-text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
-                        >
-                          <span>🔗</span>
-                          <span>Link to Feature</span>
+                        <button onClick={() => setPrId(pr.id)} className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-surface-raised">
+                          <Link2 className="size-3" /> Link feature
                         </button>
                       )}
+                      <a href={pr.githubPrUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
+                        GitHub <ExternalLink className="size-3" />
+                      </a>
                     </div>
                   </div>
                 </div>
-                
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`rounded-full px-2 py-1 text-[11px] font-medium ${
-                      pr.status === 'MERGED'
-                        ? 'bg-success/10 text-success'
-                        : pr.status === 'OPEN'
-                        ? 'bg-primary/10 text-primary-soft'
-                        : 'bg-surface-2 text-text-muted'
-                    }`}
-                  >
-                    {pr.status}
-                  </span>
-                  <a
-                    href={pr.githubPrUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[12px] text-primary-soft hover:underline"
-                  >
-                    View on GitHub →
-                  </a>
-                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
 
-      {/* Link Modal */}
-      {showLinkModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6">
-            <h2 className="text-xl font-semibold">Link PR to Feature</h2>
-            <p className="mt-1 text-[13px] text-text-dim">
-              Select a feature to link this pull request
-            </p>
-            
-            <div className="mt-6">
-              <label className="block text-[13px] font-medium text-foreground">
-                Feature
-              </label>
-              <select
-                value={selectedFeatureId}
-                onChange={(e) => setSelectedFeatureId(e.target.value)}
-                className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
-              >
-                <option value="">Select a feature</option>
-                {features?.map((feature) => (
-                  <option key={feature.id} value={feature.id}>
-                    {feature.title} ({feature.status})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="mt-6 flex gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowLinkModal(false);
-                  setSelectedPR(null);
-                  setSelectedFeatureId('');
-                }}
-                className="flex-1 rounded-lg border border-border bg-surface-2 px-4 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-surface"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleLink}
-                disabled={linkPR.isPending || !selectedFeatureId}
-                className="flex-1 rounded-lg bg-primary px-4 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-primary-hover disabled:opacity-50"
-              >
-                {linkPR.isPending ? 'Linking...' : 'Link to Feature'}
+      {prId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-lg border border-border bg-[var(--popover)] p-5 shadow-xl">
+            <h2 className="text-[16px] font-semibold">Link pull request</h2>
+            <p className="mt-1 text-[12px] text-muted-foreground">Select the feature this pull request delivers.</p>
+            <select value={featureId} onChange={(e) => setFeatureId(e.target.value)} className="mt-5 h-9 w-full rounded-md border border-border bg-surface px-3 text-[13px] outline-none focus:border-primary">
+              <option value="">Select a feature</option>
+              {features?.map((f) => <option key={f.id} value={f.id}>{f.title} · {f.status}</option>)}
+            </select>
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => { setPrId(null); setFeatureId(""); }} className="h-8 rounded-md border border-border px-3 text-[12px]">Cancel</button>
+              <button onClick={handleLink} disabled={!featureId || linkMutation.isPending} className="h-8 rounded-md bg-primary px-3 text-[12px] font-medium text-primary-foreground disabled:opacity-50">
+                {linkMutation.isPending ? "Linking…" : "Link feature"}
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

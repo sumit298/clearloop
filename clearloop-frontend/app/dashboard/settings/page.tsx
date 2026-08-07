@@ -1,335 +1,274 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  Bell,
+  GitBranch,
+  KeyRound,
+  Palette,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
+import { PageHeader, Section } from "@/components/clearloop/primitives";
+import { useTheme } from "@/lib/providers/ThemeProvider";
 import { useWorkspace, useUpdateWorkspace } from "@/lib/hooks/useWorkspace";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import {
-  useGitHubInstallation,
   useDisconnectGitHub,
+  useGitHubInstallation,
 } from "@/lib/hooks/useGitHub";
 import { githubApi } from "@/lib/api/github";
-import { useSearchParams } from "next/navigation";
+
+function SettingRow({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-6 border-b border-border px-4 py-3.5 last:border-b-0">
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] font-medium">{title}</div>
+        <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
+          {description}
+        </p>
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const { data: workspace, isLoading } = useWorkspace();
   const { user } = useAuth();
-  const updateWorkspace = useUpdateWorkspace();
+  const { theme, toggleTheme } = useTheme();
   const { data: githubInstallation } = useGitHubInstallation();
   const disconnectGitHub = useDisconnectGitHub();
+  const updateWorkspace = useUpdateWorkspace();
   const searchParams = useSearchParams();
-
   const [name, setName] = useState("");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
+  const [message, setMessage] = useState("");
   const isAdmin = user?.role === "ADMIN";
-
-  useEffect(() => {
-    const githubStatus = searchParams.get("github");
-    if (githubStatus === "connected") {
-      setSuccess("GitHub App connected successfully!");
-    } else if (githubStatus === "error") {
-      setError("Failed to connect GitHub App");
-    }
-  }, [searchParams]);
-
-  const handleConnectGitHub = () => {
-    githubApi.connectGitHub();
-  };
-
-  const handleDisconnectGitHub = async (installationId: string) => {
-    if (
-      !confirm(
-        "Are you sure you want to disconnect GitHub? This will stop automatic PR linking.",
-      )
-    ) {
-      return;
-    }
-
-    try {
-      await disconnectGitHub.mutateAsync(installationId);
-      setSuccess("GitHub App disconnected successfully");
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to disconnect GitHub");
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setSuccess("");
-
+  const connectionMessage =
+    searchParams.get("github") === "connected"
+      ? "GitHub App connected successfully."
+      : searchParams.get("github") === "error"
+        ? "GitHub connection was not completed."
+        : "";
+  const saveName = async (event: React.FormEvent) => {
+    event.preventDefault();
     try {
       await updateWorkspace.mutateAsync({ name });
-      setSuccess("Workspace updated successfully");
       setName("");
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to update workspace");
+      setMessage("Workspace name updated.");
+    } catch {
+      setMessage("Unable to update the workspace name.");
     }
   };
-
-  if (isLoading) {
+  const disconnect = async (id: string) => {
+    if (
+      !window.confirm(
+        "Disconnect GitHub? Pull requests will stop syncing automatically.",
+      )
+    )
+      return;
+    try {
+      await disconnectGitHub.mutateAsync(id);
+      setMessage("GitHub App disconnected.");
+    } catch {
+      setMessage("Unable to disconnect GitHub.");
+    }
+  };
+  if (isLoading)
     return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-text-muted">Loading...</div>
+      <div className="flex h-full items-center justify-center text-[13px] text-muted-foreground">
+        Loading settings…
       </div>
     );
-  }
-
   return (
-     <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Workspace Settings
-        </h1>
-        <p className="mt-2 text-[15px] text-text-dim">
-          Manage your workspace configuration
-        </p>
-      </div>
-
-      <div className="max-w-2xl space-y-8">
-        {/* Workspace Info */}
-        <div className="rounded-xl border border-border bg-surface p-6">
-          <h2 className="text-lg font-semibold">Workspace Information</h2>
-          <div className="mt-4 space-y-4">
-            <div>
-              <label className="block text-[13px] font-medium text-text-muted">
-                Workspace Name
-              </label>
-              <div className="mt-2 text-[15px] text-foreground">
-                {workspace?.name}
-              </div>
-            </div>
-            <div>
-              <label className="block text-[13px] font-medium text-text-muted">
-                Workspace Slug
-              </label>
-              <div className="mt-2 text-[15px] text-foreground font-mono">
-                {workspace?.slug}
-              </div>
-            </div>
-            <div>
-              <label className="block text-[13px] font-medium text-text-muted">
-                Plan
-              </label>
-              <div className="mt-2">
-                <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-[13px] font-medium text-primary-soft">
-                  {workspace?.plan}
-                </span>
-              </div>
-            </div>
-          </div>
+    <>
+      <PageHeader
+        eyebrow="Workspace"
+        title="Settings"
+        description="Everything about how this workspace talks to GitHub and to you."
+      />
+      {(message || connectionMessage) && (
+        <div className="border-b border-border bg-surface-raised px-6 py-2 text-[12px] text-muted-foreground">
+          {message || connectionMessage}
         </div>
-
-        {/* GitHub App Integration */}
-        <div className="rounded-xl border border-border bg-surface p-6">
-          <h2 className="text-lg font-semibold">GitHub App Integration</h2>
-          <p className="mt-1 text-[13px] text-text-dim">
-            Connect GitHub App once - all repos auto-link PRs forever
-          </p>
-
-          {!githubInstallation?.connected ? (
-            <div className="mt-6">
-              <div className="rounded-lg border border-border bg-background p-4">
-                <h3 className="text-[14px] font-medium text-foreground">
-                  How it works
-                </h3>
-                <ul className="mt-3 space-y-2 text-[13px] text-text-muted">
-                  <li className="flex items-start gap-2">
-                    <span className="text-primary-soft">1.</span>
-                    <span>Click "Connect GitHub App" below</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-primary-soft">2.</span>
-                    <span>Select your organization and repositories</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-primary-soft">3.</span>
-                    <span>Grant access - done forever!</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-primary-soft">4.</span>
-                    <span>
-                      All PRs auto-link to features/bugs automatically
-                    </span>
-                  </li>
-                </ul>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-primary/30 bg-primary/10 p-4">
-                <h3 className="text-[14px] font-medium text-primary-soft">
-                  ✨ Zero Developer Effort
-                </h3>
-                <p className="mt-2 text-[13px] text-text-muted">
-                  Developers just create branches like{" "}
-                  <code className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[12px]">
-                    feature/[uuid]
-                  </code>{" "}
-                  and open PRs. Everything else is automatic.
-                </p>
-              </div>
-
+      )}
+      <div className="flex max-w-4xl flex-col gap-4 p-6">
+        <Section title="General" icon={Palette}>
+          <div className="border-b border-border px-4 py-3.5">
+            <label
+              htmlFor="workspace-name"
+              className="text-[12px] font-medium text-muted-foreground"
+            >
+              Workspace name
+            </label>
+            <form onSubmit={saveName} className="mt-1.5 flex max-w-sm gap-2">
+              <input
+                id="workspace-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder={workspace?.name}
+                className="h-9 min-w-0 flex-1 rounded-md border border-border bg-surface px-3 text-[13px] outline-none focus:border-primary"
+              />
               <button
-                onClick={handleConnectGitHub}
-                className="mt-6 w-full rounded-lg bg-primary px-4 py-3 text-[14px] font-medium text-foreground transition-colors hover:bg-primary-hover"
+                disabled={!name || updateWorkspace.isPending || !isAdmin}
+                className="rounded-md bg-primary px-3 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
+              >
+                Save
+              </button>
+            </form>
+          </div>
+          <SettingRow
+            title="Appearance"
+            description="Dark is the default. Light mode uses the same contrast rules."
+          >
+            <button
+              onClick={toggleTheme}
+              className="h-8 w-24 rounded-md border border-border text-[12px] font-medium hover:bg-(--surface-raised)"
+            >
+              {theme === "dark" ? "Dark" : "Light"}
+            </button>
+          </SettingRow>
+          <SettingRow
+            title="Keyboard shortcuts"
+            description="Open command search with ⌘K from any dashboard page."
+          >
+            <kbd className="rounded border border-border bg-(--surface-raised) px-1.5 py-0.5 font-mono text-[11px]">
+              ⌘K
+            </kbd>
+          </SettingRow>
+        </Section>
+        <Section
+          title="GitHub App"
+          icon={GitBranch}
+          action={
+            githubInstallation?.connected ? (
+              <button
+                onClick={githubApi.connectGitHub}
+                className="flex items-center gap-1.5 text-[12px] text-muted-foreground hover:text-foreground"
+              >
+                <RefreshCw className="size-3" />
+                Re-sync all
+              </button>
+            ) : undefined
+          }
+        >
+          {!githubInstallation?.connected ? (
+            <div className="p-4">
+              <p className="text-[13px] text-muted-foreground">
+                Connect the GitHub App once and ClearLoop will mirror pull
+                requests from selected repositories.
+              </p>
+              <button
+                onClick={githubApi.connectGitHub}
+                className="mt-4 h-9 rounded-md bg-primary px-3 text-[12px] font-medium text-primary-foreground"
               >
                 Connect GitHub App
               </button>
-
-              <div className="mt-4 rounded-lg border border-border bg-background p-4">
-                <h3 className="text-[13px] font-medium text-foreground">
-                  Fallback: Manual Linking
-                </h3>
-                <p className="mt-2 text-[12px] text-text-muted">
-                  If you prefer not to install the GitHub App, you can manually
-                  link PRs in the Pull Requests page.
-                </p>
-              </div>
             </div>
           ) : (
-            <div className="mt-6 space-y-6">
+            <div>
               {(githubInstallation.installations ?? []).map((installation) => (
-                <div key={installation.id}>
-                  <div className="rounded-lg border border-success/30 bg-success/10 p-4">
-                    <h3 className="text-[14px] font-medium text-success">
-                      ✓ GitHub App Connected
-                      {installation.accountLogin ? ` — ${installation.accountLogin}` : ""}
-                    </h3>
-                    <a
-                      href={`https://github.com/settings/installations/${installation.githubInstallationId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-6 block w-full rounded-lg bg-primary px-4 py-3 text-center text-[14px] font-medium text-foreground transition-colors hover:bg-primary-hover"
-                    >
-                      Manage Repositories
-                    </a>
-                    <p className="mt-2 text-[13px] text-text-muted">
-                      All PRs in connected repos will automatically link to features
-                      and bugs based on branch names.
-                    </p>
-                  </div>
-
-                  {installation.repositories.length > 0 && (
-                    <div className="mt-4">
-                      <h3 className="text-[13px] font-medium text-foreground">
-                        Repositories ({installation.repositories.length})
-                      </h3>
-                      <div className="mt-2 space-y-2">
-                        {installation.repositories.map((repo) => (
-                          <div
-                            key={repo.id}
-                            className="rounded-lg border border-border bg-background p-3"
-                          >
-                            <p className="text-[13px] font-medium text-foreground">
-                              {repo.fullName}
-                            </p>
-                            <p className="mt-1 text-[12px] text-text-dim">
-                              {repo.projectId ? "Linked to a project" : "Not linked to a project"}
-                            </p>
-                          </div>
-                        ))}
+                <div
+                  key={installation.id}
+                  className="border-b border-border p-4 last:border-b-0"
+                >
+                  <div className="flex items-center gap-3">
+                    <GitBranch className="size-4 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13px] font-medium">
+                        {installation.accountLogin || "GitHub App"}
+                      </div>
+                      <div className="font-mono text-[11px] text-muted-foreground">
+                        {installation.repositories.length} connected
+                        repositories
                       </div>
                     </div>
-                  )}
-
+                    <span className="rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success">
+                      Healthy
+                    </span>
+                  </div>
+                  {installation.repositories.map((repository) => (
+                    <div
+                      key={repository.id}
+                      className="mt-3 flex items-center justify-between rounded-md border border-border px-3 py-2 text-[12px]"
+                    >
+                      <span className="font-mono">{repository.fullName}</span>
+                      <span className="text-muted-foreground">
+                        {repository.projectId ? "Mirroring" : "Not linked"}
+                      </span>
+                    </div>
+                  ))}
                   {isAdmin && (
                     <button
-                      onClick={() => handleDisconnectGitHub(installation.id)}
                       disabled={disconnectGitHub.isPending}
-                      className="mt-6 w-full rounded-lg border border-danger bg-danger/10 px-4 py-3 text-[14px] font-medium text-danger transition-colors hover:bg-danger/20 disabled:opacity-50"
+                      onClick={() => disconnect(installation.id)}
+                      className="mt-3 text-[12px] text-destructive hover:underline"
                     >
-                      {disconnectGitHub.isPending
-                        ? "Disconnecting..."
-                        : "Disconnect GitHub App"}
+                      Disconnect GitHub App
                     </button>
                   )}
                 </div>
               ))}
-
-              <div className="rounded-lg border border-border bg-background p-4">
-                <h3 className="text-[13px] font-medium text-foreground">
-                  Branch Naming Patterns
-                </h3>
-                <div className="mt-2 space-y-2 text-[12px]">
-                  <div>
-                    <span className="font-medium text-foreground">
-                      For Features:
-                    </span>
-                    <code className="ml-2 rounded bg-surface-2 px-2 py-1 font-mono text-[11px] text-text-muted">
-                      feature/[feature-uuid]
-                    </code>
-                  </div>
-                  <div>
-                    <span className="font-medium text-foreground">
-                      For Bugs:
-                    </span>
-                    <code className="ml-2 rounded bg-surface-2 px-2 py-1 font-mono text-[11px] text-text-muted">
-                      bug/[bug-uuid]
-                    </code>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
-        </div>
-
-        {/* Update Workspace (Admin Only) */}
+        </Section>
+        <Section title="Notifications" icon={Bell}>
+          <SettingRow
+            title="Review requests"
+            description="When someone requests your review on a mirrored pull request."
+          >
+            <span className="rounded-full bg-surface-raised px-2 py-1 text-[11px] text-muted-foreground">
+              Coming soon
+            </span>
+          </SettingRow>
+          <SettingRow
+            title="Daily digest"
+            description="A morning summary of overdue features and unresolved bugs."
+          >
+            <span className="rounded-full bg-surface-raised px-2 py-1 text-[11px] text-muted-foreground">
+              Coming soon
+            </span>
+          </SettingRow>
+        </Section>
+        <Section title="API tokens" icon={KeyRound}>
+          <SettingRow
+            title="CI token"
+            description="Use the API to connect your existing engineering workflows."
+          >
+            <span className="font-mono text-[11px] text-muted-foreground">
+              Not configured
+            </span>
+          </SettingRow>
+        </Section>
         {isAdmin && (
-          <div className="rounded-xl border border-border bg-surface p-6">
-            <h2 className="text-lg font-semibold">Update Workspace</h2>
-            <p className="mt-1 text-[13px] text-text-muted">
-              Change your workspace name
-            </p>
-
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-              {error && (
-                <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-[13px] text-danger">
-                  {error}
-                </div>
-              )}
-              {success && (
-                <div className="rounded-lg border border-success/30 bg-success/10 px-4 py-3 text-[13px] text-success">
-                  {success}
-                </div>
-              )}
-
-              <div>
-                <label
-                  htmlFor="name"
-                  className="block text-[13px] font-medium text-foreground"
-                >
-                  New Workspace Name
-                </label>
-                <input
-                  id="name"
-                  type="text"
-                  placeholder={workspace?.name}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3.5 py-2.5 text-[14px] text-foreground placeholder:text-text-muted focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
-                />
-              </div>
-
+          <Section title="Danger zone" icon={Trash2}>
+            <SettingRow
+              title="Delete workspace"
+              description="Deleting a workspace is irreversible and removes its projects and synced data."
+            >
               <button
-                type="submit"
-                disabled={updateWorkspace.isPending || !name}
-                className="rounded-lg bg-primary px-4 py-2.5 text-[14px] font-medium text-foreground transition-all hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
+                className="h-8 rounded-md border border-destructive/40 px-3 text-[12px] text-destructive"
+                onClick={() =>
+                  setMessage(
+                    "Workspace deletion is not available from this version of the API.",
+                  )
+                }
               >
-                {updateWorkspace.isPending ? "Updating..." : "Update Workspace"}
+                Delete
               </button>
-            </form>
-          </div>
-        )}
-
-        {!isAdmin && (
-          <div className="rounded-xl border border-border bg-surface p-6">
-            <div className="text-[13px] text-text-muted">
-              Only workspace admins can update workspace settings.
-            </div>
-          </div>
+            </SettingRow>
+          </Section>
         )}
       </div>
-    </div>
+    </>
   );
 }

@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function WorkspaceSwitcher() {
+export function WorkspaceSwitcher({ compact = false }: { compact?: boolean }) {
   const { workspace, switchWorkspace } = useAuth();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -32,16 +32,16 @@ export function WorkspaceSwitcher() {
     }
   };
   return (
-    <div className="relative border-b border-border px-6 py-4">
+    <div className={`relative ${compact ? "" : "border-b border-border px-6 py-4"}`}>
       <button
         type="button"
         onClick={() => hasMultiple && setOpen((v) => !v)}
-        className={`flex w-full items-center justify-between text-left ${
+        className={`flex items-center justify-between text-left ${compact ? "rounded-md border border-transparent px-2 py-1.5 hover:border-border hover:bg-surface" : "w-full"} ${
           hasMultiple ? "cursor-pointer" : "cursor-default"
         }`}
       >
         <div>
-          <div className="text-[13px] font-medium text-foreground">
+          <div className="max-w-[160px] truncate text-[13px] font-medium text-foreground">
             {workspace?.name}
           </div>
           <div className="mt-0.5 text-[11px] text-text-muted">
@@ -56,7 +56,7 @@ export function WorkspaceSwitcher() {
       </button>
 
       {open && (
-        <div className="absolute left-4 right-4 top-full z-10 mt-1 rounded-lg border border-border bg-surface py-1 shadow-lg">
+        <div className={`absolute z-40 mt-1 rounded-md border border-border bg-surface py-1 shadow-lg ${compact ? "left-0 top-full w-60" : "left-4 right-4 top-full"}`}>
           {error && (
             <div className="px-3 py-2 text-[12px] text-danger">{error}</div>
           )}

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Edit(./prisma/migrations/**)",
+      "Bash(npx prisma migrate reset:*)",
+      "Bash(npx prisma db push:*)"
+    ]
+  }
+}
