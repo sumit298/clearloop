@@ -3,12 +3,16 @@ import {
   NotFoundException,
   BadRequestException,
   UnauthorizedException,
+ 
+  Inject,
 } from '@nestjs/common';
+import type { LoggerService } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { createHash, randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { UserRole } from '@prisma/client';
 import { EmailService } from '../email/email.service';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 
 function hashToken(rawToken: string): string {
   return createHash('sha256').update(rawToken).digest('hex');
@@ -18,7 +22,8 @@ function hashToken(rawToken: string): string {
 export class InvitationsService {
   constructor(
     private prisma: PrismaService,
-    private emailService: EmailService,
+    private emailService: EmailService, 
+    @Inject(WINSTON_MODULE_PROVIDER) private readonly logger: LoggerService,
   ) {}
 
   async create(
@@ -78,24 +83,28 @@ export class InvitationsService {
       },
     });
 
+    let emailSent = true;
     try {
       // ✅ Fix 2: query workspaceMember, not user
       const inviter = await this.prisma.workspaceMember.findUnique({
-        where: { id: invitedByMemberId },
+        where: { id: invitedByMemberId, tenantId },
         select: { name: true },
       });
 
       await this.emailService.sendInvitationEmail(
-        email,
+        normalizeEmail,
         inviter?.name || 'Someone',
         invitation.tenant.name,
         token,
       );
     } catch (error) {
+      emailSent = false;
+      this.logger.error('Failed to send invitation email', error);
+
       console.error('Failed to send invitation email:', error);
     }
 
-    return invitation;
+    return {...invitation, emailSent};
   }
 
   async validate(rawToken: string) {
@@ -133,11 +142,37 @@ export class InvitationsService {
       throw new BadRequestException('Invitation expired');
     }
 
-    return invitation;
+    const user = await this.prisma.user.findUnique({
+      where: { email: invitation.email },
+      select: { passwordHash: true },
+    });
+    const authMethod = user ? (user.passwordHash ? 'password' : 'oauth') : null;
+
+    return {
+      ...invitation,
+      userExists: user !== null,
+      authMethod,
+    };
   }
 
-  async accept(token: string, name: string, password: string) {
+  async accept(
+    token: string,
+    name: string,
+    password: string,
+    currentUserId?: string,
+  ) {
     const invitation = await this.validate(token);
+
+    if (currentUserId) {
+      const current = await this.prisma.user.findUnique({
+        where: { id: currentUserId },
+      });
+      if (current && current.email !== invitation.email) {
+        throw new BadRequestException(
+          'This invitation is for a different email address.',
+        );
+      }
+    }
 
     return this.prisma.$transaction(async (tx) => {
       let user = await tx.user.findUnique({
@@ -152,7 +187,10 @@ export class InvitationsService {
         });
       } else if (user.passwordHash) {
         // ✅ Fix 3: passwordHash is now guaranteed string, not null
-        const passwordMatches = await bcrypt.compare(password, user.passwordHash);
+        const passwordMatches = await bcrypt.compare(
+          password,
+          user.passwordHash,
+        );
         if (!passwordMatches) {
           throw new UnauthorizedException(
             'An account with this email already exists. Enter your existing password to join this workspace.',

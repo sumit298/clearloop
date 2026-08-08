@@ -3,320 +3,257 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowLeft, GitBranch, Mail } from "lucide-react";
 import { Logo } from "@/components/landing/Logo";
 import { authApi } from "@/lib/api/auth";
 import { useAuth } from "@/lib/contexts/AuthContext";
 
+type WorkspaceOption = { id: string; name: string; slug: string };
+
 export default function SignIn() {
   const router = useRouter();
-  const { login: authLogin } = useAuth();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
-  const [sessionToken, setSessionToken] = useState("");
   const [password, setPassword] = useState("");
+  const [sessionToken, setSessionToken] = useState("");
+  const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [workspaces, setWorkspaces] = useState<
-    Array<{ id: string; name: string; slug: string }>
-  >([]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const signIn = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError("");
     setLoading(true);
-
     try {
       const response = await authApi.login({ email, password });
-
-      // Check if user belongs to multiple workspaces
-      if (response.requiresWorkspaceSelection && response.workspaces) {
+      if (
+        response.requiresWorkspaceSelection &&
+        response.workspaces &&
+        response.sessionToken
+      ) {
         setWorkspaces(response.workspaces);
-        setSessionToken(response.sessionToken!);
-        setLoading(false);
+        setSessionToken(response.sessionToken);
         return;
       }
-
-      // Single workspace - login directly
-      await authLogin(response.access_token);
+      await login(response.access_token);
       router.push("/dashboard");
-    } catch (err: any) {
+    } catch {
       setError(
-        err.response?.data?.message || err.message || "Failed to sign in",
+        "Unable to sign in. Check your email and password, then try again.",
       );
     } finally {
       setLoading(false);
     }
   };
 
-  const handleWorkspaceSelect = async (workspace: {
-    id: string;
-    name: string;
-    slug: string;
-  }) => {
+  const chooseWorkspace = async (workspace: WorkspaceOption) => {
     setLoading(true);
+    setError("");
     try {
       const response = await authApi.selectWorkspace(
         sessionToken,
         workspace.id,
       );
-      await authLogin(response.access_token);
+      await login(response.access_token);
       router.push("/dashboard");
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to select workspace");
+    } catch {
+      setError("Unable to select this workspace. Please try again.");
     } finally {
       setLoading(false);
     }
   };
+
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
-      {/* Left Side - Form */}
-      <div className="flex w-full flex-col lg:w-[45%]">
-        {/* Header */}
-        <header className="border-b border-border">
-          <div className="flex h-16 items-center px-8">
-            <Link href="/">
-              <Logo />
+    <AuthFrame
+      title={workspaces.length ? "Choose a workspace" : "Sign in to ClearLoop"}
+      subtitle={
+        workspaces.length
+          ? "Select where you want to continue. Everything is scoped to one workspace at a time."
+          : "GitHub is the fastest path — it is how your repos, pull requests, and commits get linked."
+      }
+      footer={
+        workspaces.length ? (
+          <button
+            onClick={() => setWorkspaces([])}
+            className="text-primary hover:underline"
+          >
+            Back to sign in
+          </button>
+        ) : (
+          <>
+            No account yet?{" "}
+            <Link href="/signup" className="text-primary hover:underline">
+              Create one
             </Link>
+          </>
+        )
+      }
+    >
+      {workspaces.length ? (
+        <>
+          {error && (
+            <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+              {error}
+            </div>
+          )}
+          <div className="panel overflow-hidden">
+          {workspaces.map((workspace) => (
+            <button
+              key={workspace.id}
+              disabled={loading}
+              onClick={() => chooseWorkspace(workspace)}
+              className="row-hover flex w-full items-center gap-3 border-b border-border px-4 py-3.5 text-left last:border-b-0"
+            >
+              <span className="flex size-9 items-center justify-center rounded-lg bg-primary/15 text-[14px] font-bold text-primary">
+                {workspace.name[0]}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[14px] font-medium">
+                  {workspace.name}
+                </span>
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  clearloop.app/{workspace.slug}
+                </span>
+              </span>
+              <span className="text-muted-foreground">→</span>
+            </button>
+          ))}
           </div>
-        </header>
+        </>
+      ) : (
+        <form className="space-y-4" onSubmit={signIn}>
+          {error && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+              {error}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              const base =
+                process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+                "http://localhost:8000";
+              window.location.href = `${base}/auth/github`;
+            }}
+            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary text-[13px] font-medium text-primary-foreground"
+          >
+            <GitBranch className="size-4" />
+            Sign in with GitHub
+          </button>
+          <div className="flex items-center gap-3">
+            <span className="h-px flex-1 bg-border" />
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              or email
+            </span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          <label className="block text-[12px] font-medium">
+            Work email
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@company.com"
+              className="mt-1.5 h-10 w-full rounded-md border border-border bg-surface px-3 text-[13px] outline-none focus:border-primary"
+            />
+          </label>
+          <label className="block text-[12px] font-medium">
+            Password
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Enter your password"
+              className="mt-1.5 h-10 w-full rounded-md border border-border bg-surface px-3 text-[13px] outline-none focus:border-primary"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={loading}
+            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-border bg-surface text-[13px] font-medium hover:bg-(--surface-raised) disabled:opacity-50"
+          >
+            <Mail className="size-4" />
+            {loading ? "Signing in…" : "Continue with email"}
+          </button>
+        </form>
+      )}
+    </AuthFrame>
+  );
+}
 
-        {/* Form Content */}
-        <div className="flex flex-1 items-center justify-center px-8 py-12">
-          <div className="w-full max-w-95">
-            {workspaces.length > 0 ? (
-              // Workspace selection
-              <div>
-                <h1 className="text-3xl font-semibold tracking-tight">
-                  Select workspace
-                </h1>
-                <p className="mt-2 text-[15px] text-text-dim">
-                  You belong to multiple workspaces
-                </p>
-                <div className="mt-8 space-y-3">
-                  {workspaces.map((workspace) => (
-                    <button
-                      key={workspace.id}
-                      onClick={() => handleWorkspaceSelect(workspace)}
-                      className="w-full rounded-lg border border-border bg-surface px-4 py-3 text-left transition-colors hover:border-primary-soft/40 hover:bg-surface-2"
-                    >
-                      <div className="font-medium text-foreground">
-                        {workspace.name}
-                      </div>
-                      <div className="text-[13px] text-text-muted">
-                        {workspace.slug}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                <button
-                  onClick={() => setWorkspaces([])}
-                  className="mt-6 text-[13px] text-text-dim hover:text-foreground"
-                >
-                  ← Back to login
-                </button>
-              </div>
-            ) : (
-              // Login form
-              <div>
-                <div>
-                  <h1 className="text-3xl font-semibold tracking-tight">
-                    Welcome back
-                  </h1>
-                  <p className="mt-2 text-[15px] text-text-dim">
-                    Sign in to continue to ClearLoop
-                  </p>
-                </div>
-
-                <form className="mt-10 space-y-5" onSubmit={handleSubmit}>
-                  {error && (
-                    <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-[13px] text-danger">
-                      {error}
-                    </div>
-                  )}
-
-                  <div>
-                    <label
-                      htmlFor="email"
-                      className="block text-[13px] font-medium text-foreground"
-                    >
-                      Email
-                    </label>
-                    <input
-                      id="email"
-                      type="email"
-                      placeholder="you@company.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      className="mt-2 w-full rounded-lg border border-border bg-surface px-3.5 py-2.5 text-[14px] text-foreground placeholder:text-text-muted focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
-                    />
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <label
-                        htmlFor="password"
-                        className="block text-[13px] font-medium text-foreground"
-                      >
-                        Password
-                      </label>
-                      <Link
-                        href="/forgot-password"
-                        className="text-[13px] text-primary-soft transition-colors hover:text-primary-hover"
-                      >
-                        Forgot?
-                      </Link>
-                    </div>
-                    <input
-                      id="password"
-                      type="password"
-                      placeholder="Enter your password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                      className="mt-2 w-full rounded-lg border border-border bg-surface px-3.5 py-2.5 text-[14px] text-foreground placeholder:text-text-muted focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full rounded-lg bg-primary px-4 py-2.5 text-[14px] font-medium text-foreground transition-all hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? "Signing in..." : "Sign in"}
-                  </button>
-                </form>
-
-                <div className="relative mt-8">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-border" />
-                  </div>
-                  <div className="relative flex justify-center text-[12px]">
-                    <span className="bg-background px-3 text-text-muted">
-                      Or
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-6 grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const apiUrl =
-                        process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
-                        "http://localhost:8000";
-                      window.location.href = `${apiUrl}/auth/github`;
-                    }}
-                    className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-surface-2"
-                  >
-                    <svg
-                      className="h-4 w-4"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                    >
-                      <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-                    </svg>
-                    GitHub
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const apiUrl =
-                        process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
-                        "http://localhost:8000";
-                      window.location.href = `${apiUrl}/auth/google`;
-                    }}
-                    className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-surface-2"
-                  >
-                    <svg
-                      className="h-4 w-4"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                    >
-                      <path
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                        fill="#4285F4"
-                      />
-                      <path
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                        fill="#34A853"
-                      />
-                      <path
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                        fill="#FBBC05"
-                      />
-                      <path
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                        fill="#EA4335"
-                      />
-                    </svg>
-                    Google
-                  </button>
-                </div>
-
-                <p className="mt-10 text-center text-[13px] text-text-muted">
-                  Don't have an account?{" "}
-                  <Link
-                    href="/signup"
-                    className="font-medium text-foreground transition-colors hover:text-primary-soft"
-                  >
-                    Sign up
-                  </Link>
-                </p>
-              </div>
-            )}
+function AuthFrame({
+  title,
+  subtitle,
+  children,
+  footer,
+}: {
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+  footer: React.ReactNode;
+}) {
+  return (
+    <div className="grid min-h-screen lg:grid-cols-2">
+      <main className="flex flex-col px-6 py-8 sm:px-12">
+        <Link
+          href="/"
+          className="inline-flex w-fit items-center gap-2 text-[13px] text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-3.5" />
+          Back
+        </Link>
+        <div className="flex flex-1 items-center">
+          <div className="w-full max-w-90">
+            <Logo className="[&>span+span]:hidden" />
+            <h1 className="mt-6 text-[24px] font-semibold leading-tight">
+              {title}
+            </h1>
+            <p className="mt-2 text-[13px] text-muted-foreground">{subtitle}</p>
+            <div className="mt-8">{children}</div>
+            <div className="mt-6 text-[12px] text-muted-foreground">{footer}</div>
           </div>
         </div>
-      </div>
-
-      {/* Right Side - Visual */}
-      <div className="hidden lg:flex lg:w-[55%] lg:flex-col">
-        <div className="relative flex flex-1 items-center justify-center overflow-hidden border-l border-border bg-linear-to-br from-surface via-background to-background p-16">
-          {/* Animated circles */}
-          <div className="absolute inset-0 overflow-hidden">
-            <div className="absolute left-1/4 top-1/4 h-125 w-125 rounded-full bg-primary/5 blur-3xl" />
-            <div className="absolute right-1/4 bottom-1/4 h-100 w-100 rounded-full bg-primary-soft/5 blur-3xl" />
+      </main>
+      <aside className="relative hidden overflow-hidden border-l border-border bg-surface lg:block">
+        <div className="absolute inset-0 opacity-50 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-size-[64px_64px]" />
+        <div className="relative flex h-full flex-col justify-center gap-8 px-12">
+          <div>
+            <div className="font-mono text-[12px] text-primary">
+              the loop, today
+            </div>
+            <p className="mt-3 max-w-sm text-[18px] leading-snug tracking-tight">
+              “We deleted our weekly status doc the day we connected the first
+              repo.”
+            </p>
+            <p className="mt-3 text-[12px] text-muted-foreground">
+              Miles Cheng · Engineering Manager, Northwind Labs
+            </p>
           </div>
-
-          {/* Grid overlay */}
-          <div className="pointer-events-none absolute inset-0 grid-bg opacity-20" />
-
-          {/* Floating elements */}
-          <div className="relative z-10 flex flex-col items-center justify-center space-y-8">
-            {/* Center logo */}
-            <div className="flex h-24 w-24 items-center justify-center rounded-2xl border border-primary-soft/20 bg-surface/50 backdrop-blur-xl">
-              <svg width="48" height="48" viewBox="0 0 20 20" fill="none">
-                <circle
-                  cx="10"
-                  cy="10"
-                  r="8.5"
-                  stroke="#B1A3FA"
-                  strokeWidth="1.5"
-                />
-                <circle
-                  cx="10"
-                  cy="10"
-                  r="5"
-                  stroke="#8739D5"
-                  strokeWidth="1.5"
-                />
-                <circle cx="10" cy="10" r="2" fill="#554091" />
-              </svg>
+          <div className="panel max-w-sm overflow-hidden">
+            <div className="border-b border-border px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              Live activity
             </div>
-
-            {/* Text */}
-            <div className="text-center">
-              <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-                Engineering context,
-                <br />
-                finally connected.
-              </h2>
-              <p className="mt-3 text-[14px] text-text-dim">
-                Track features, PRs, releases, and incidents in one timeline.
-              </p>
-            </div>
+            {[
+              "Merged the GitHub App installation",
+              "Linked a pull request to WEB-153",
+              "Released version 2.4.0",
+              "Created a feature from a customer request",
+            ].map((item, index) => (
+              <div
+                key={item}
+                className="flex gap-3 border-b border-border px-4 py-2 text-[12px] last:border-b-0"
+              >
+                <span className="min-w-0 flex-1 text-muted-foreground">{item}</span>
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {index + 1}h
+                </span>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+      </aside>
     </div>
   );
 }

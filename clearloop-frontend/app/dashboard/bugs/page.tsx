@@ -1,277 +1,182 @@
 "use client";
 
-import { useState } from 'react';
-import { useBugs, useCreateBug } from '@/lib/hooks/useBugs';
-import { useFeatures } from '@/lib/hooks/useFeatures';
-import { useProjects } from '@/lib/hooks/useProjects';
-import Link from 'next/link';
+import { useState } from "react";
+import Link from "next/link";
+import { Bug as BugIcon, Plus } from "lucide-react";
+import { PageHeader, EmptyState } from "@/components/clearloop/primitives";
+import { Toolbar, SearchField, FilterMenu, SortMenu, ResultCount } from "@/components/clearloop/toolbar";
+import { SeverityChip, BugStatusChip, toneColor } from "@/components/clearloop/status";
+import { useBugs, useCreateBug } from "@/lib/hooks/useBugs";
+import { useFeatures } from "@/lib/hooks/useFeatures";
+import { useProjects } from "@/lib/hooks/useProjects";
+
+const SEV_OPTIONS = [
+  { value: "CRITICAL", label: "Critical", color: toneColor("red") },
+  { value: "HIGH", label: "High", color: toneColor("orange") },
+  { value: "MEDIUM", label: "Medium", color: toneColor("amber") },
+  { value: "LOW", label: "Low", color: toneColor("slate") },
+];
+const STATUS_OPTIONS = [
+  { value: "OPEN", label: "Open", color: toneColor("red") },
+  { value: "IN_PROGRESS", label: "In Progress", color: toneColor("blue") },
+  { value: "RESOLVED", label: "Resolved", color: toneColor("green") },
+  { value: "CLOSED", label: "Closed", color: toneColor("slate") },
+];
+const SEV_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
+const STATUS_ORDER = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
 
 export default function BugsPage() {
   const { data: bugs, isLoading } = useBugs();
   const { data: projects } = useProjects();
   const createBug = useCreateBug();
 
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    severity: "MEDIUM",
-    source: "",
-    projectId: "",
-    featureId: "",
-  });
-  const { data: features } = useFeatures(formData.projectId || undefined);
+  const [q, setQ] = useState("");
+  const [sevFilter, setSevFilter] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [sort, setSort] = useState("severity");
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ title: "", description: "", severity: "MEDIUM", source: "", projectId: "", featureId: "" });
+  const { data: features } = useFeatures(form.projectId || undefined);
+
+  const toggle = (set: (fn: (v: string[]) => string[]) => void) => (v: string) =>
+    set((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]);
+
+  const rows = (bugs || [])
+    .filter((b) => q ? b.title.toLowerCase().includes(q.toLowerCase()) : true)
+    .filter((b) => sevFilter.length ? sevFilter.includes(b.severity) : true)
+    .filter((b) => statusFilter.length ? statusFilter.includes(b.status) : true)
+    .sort((a, b) =>
+      sort === "severity" ? SEV_ORDER.indexOf(a.severity) - SEV_ORDER.indexOf(b.severity)
+        : sort === "status" ? STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)
+        : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-
     try {
-      const { source, ...bugData } = formData;
-      // Add source to description for now (we can enhance backend later to store source separately)
-      const descriptionWithSource = `**Source:** ${source}\n\n${bugData.description}`;
-
-      await createBug.mutateAsync({
-        ...bugData,
-        description: descriptionWithSource,
-        featureId: bugData.featureId || undefined,
-        severity: bugData.severity as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
-      });
-
-      setShowCreateModal(false);
-      setFormData({ title: "", description: "", severity: "MEDIUM", source: "", projectId: "", featureId: "" });
-    } catch (error) {
-      console.error("Failed to create bug:", error);
-    }
+      const { source, ...rest } = form;
+      await createBug.mutateAsync({ ...rest, description: `**Source:** ${source}\n\n${rest.description}`, featureId: rest.featureId || undefined, severity: rest.severity as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" });
+      setShowCreate(false);
+      setForm({ title: "", description: "", severity: "MEDIUM", source: "", projectId: "", featureId: "" });
+    } catch { /* mutation state retains error */ }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-text-muted">Loading...</div>
-      </div>
-    );
-  }
+  if (isLoading) return <div className="flex h-full items-center justify-center text-[13px] text-muted-foreground">Loading bugs…</div>;
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Bugs</h1>
-          <p className="mt-2 text-[15px] text-text-dim">
-            Track bugs from any source to resolution
-          </p>
-        </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="rounded-lg bg-primary px-4 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-primary-hover"
-        >
-          Report Bug
-        </button>
+    <>
+      <PageHeader
+        eyebrow="Workspace"
+        title="Bugs"
+        description="Severity-first triage. Every bug can point at the feature and pull request that introduced it."
+        actions={
+          <button onClick={() => setShowCreate(true)} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-[12px] font-medium text-primary-foreground">
+            <Plus className="size-3.5" /> Report bug
+          </button>
+        }
+      />
+
+      <Toolbar>
+        <SearchField value={q} onChange={setQ} placeholder="Search bugs…" />
+        <FilterMenu label="Severity" selected={sevFilter} onToggle={toggle(setSevFilter)} options={SEV_OPTIONS} />
+        <FilterMenu label="Status" selected={statusFilter} onToggle={toggle(setStatusFilter)} options={STATUS_OPTIONS} />
+        <SortMenu value={sort} onChange={setSort} options={[{ value: "severity", label: "Severity" }, { value: "status", label: "Status" }, { value: "newest", label: "Newest" }]} />
+        <ResultCount count={rows.length} noun="bug" />
+      </Toolbar>
+
+      <div className="p-6">
+        {rows.length === 0 ? (
+          <div className="panel">
+            <EmptyState
+              icon={BugIcon}
+              title="Clean queue"
+              description="Nothing matches these filters. Either the build is healthy or the filters are too tight."
+              action={
+                <button onClick={() => { setQ(""); setSevFilter([]); setStatusFilter([]); }} className="inline-flex h-8 items-center rounded-md border border-border px-3 text-[12px]">
+                  Clear filters
+                </button>
+              }
+            />
+          </div>
+        ) : (
+          <div className="panel overflow-hidden">
+            <div className="flex items-center gap-3 border-b border-border bg-surface-raised px-4 py-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+              <span className="flex-1">Bug</span>
+              <span className="w-[90px]">Severity</span>
+              <span className="w-[110px]">Status</span>
+              <span className="hidden w-[80px] lg:block">Source</span>
+            </div>
+            {rows.map((b) => {
+              const sourceMatch = b.description?.match(/\*\*Source:\*\*\s*(.+?)\n/);
+              const source = sourceMatch ? sourceMatch[1] : "—";
+              return (
+                <Link key={b.id} href={`/dashboard/bugs/${b.id}`} className="row-hover flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0">
+                  <span className="min-w-0 flex-1 truncate text-[13px]">{b.title}</span>
+                  <span className="w-[90px] shrink-0"><SeverityChip severity={b.severity} /></span>
+                  <span className="w-[110px] shrink-0"><BugStatusChip status={b.status} /></span>
+                  <span className="hidden w-[80px] shrink-0 truncate font-mono text-[12px] text-muted-foreground lg:block">{source}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {!bugs || bugs.length === 0 ? (
-        <div className="rounded-xl border border-border bg-surface p-12 text-center">
-          <p className="text-text-muted">No bugs reported yet</p>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-primary-hover"
-          >
-            Report your first bug
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {bugs.map((bug) => (
-            <Link
-              key={bug.id}
-              href={`/dashboard/bugs/${bug.id}`}
-              className="block rounded-lg border border-border bg-surface p-4 transition-colors hover:bg-surface-2"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-medium text-foreground">{bug.title}</h3>
-                  {bug.description && (
-                    <p className="mt-1 text-[13px] text-text-muted line-clamp-2">
-                      {bug.description}
-                    </p>
-                  )}
-                  <div className="mt-2 flex items-center gap-3 text-[12px] text-text-dim">
-                    {bug.feature && (
-                      <span>Feature: {bug.feature.title}</span>
-                    )}
-                    {bug.reportedBy && (
-                      <span>Reported by: {bug.reportedBy.name}</span>
-                    )}
-                  </div>
+      {showCreate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" className="w-full max-w-lg rounded-lg border border-border bg-[var(--popover)] p-5 shadow-xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-[16px] font-semibold">Report bug</h2>
+            <p className="mt-1 text-[12px] text-muted-foreground">Track bugs from any source — Excel, email, client calls, QA testing.</p>
+            <form onSubmit={handleCreate} className="mt-5 space-y-4">
+              {createBug.isError && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+                  Failed to report bug. Please try again.
                 </div>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`rounded-full px-2 py-1 text-[11px] font-medium ${
-                      bug.status === 'RESOLVED'
-                        ? 'bg-success/10 text-success'
-                        : bug.status === 'IN_PROGRESS'
-                        ? 'bg-primary/10 text-primary-soft'
-                        : 'bg-surface-2 text-text-muted'
-                    }`}
-                  >
-                    {bug.status.replace('_', ' ')}
-                  </span>
-                  <span
-                    className={`rounded-full px-2 py-1 text-[11px] font-medium ${
-                      bug.severity === 'CRITICAL'
-                        ? 'bg-danger/10 text-danger'
-                        : bug.severity === 'HIGH'
-                        ? 'bg-warning/10 text-warning'
-                        : 'bg-surface-2 text-text-muted'
-                    }`}
-                  >
-                    {bug.severity}
-                  </span>
+              )}
+              <div>
+                <label className="text-[12px] font-medium">Title *</label>
+                <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required placeholder="e.g. Login button not working on mobile" className="mt-1.5 h-9 w-full rounded-md border border-border bg-surface px-3 text-[13px] outline-none focus:border-primary" />
+              </div>
+              <div>
+                <label className="text-[12px] font-medium">Source *</label>
+                <input value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} required placeholder="e.g. Client email, QA testing, Sentry" className="mt-1.5 h-9 w-full rounded-md border border-border bg-surface px-3 text-[13px] outline-none focus:border-primary" />
+              </div>
+              <div>
+                <label className="text-[12px] font-medium">Description *</label>
+                <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} required rows={3} placeholder="Steps to reproduce, expected vs actual…" className="mt-1.5 w-full rounded-md border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[12px] font-medium">Severity</label>
+                  <select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })} className="mt-1.5 h-9 w-full rounded-md border border-border bg-surface px-3 text-[13px] outline-none">
+                    {["LOW", "MEDIUM", "HIGH", "CRITICAL"].map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[12px] font-medium">Project *</label>
+                  <select value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value, featureId: "" })} required className="mt-1.5 h-9 w-full rounded-md border border-border bg-surface px-3 text-[13px] outline-none">
+                    <option value="">Select project</option>
+                    {projects?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
                 </div>
               </div>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {/* Create Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-xl border border-border bg-surface p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-semibold">Report Bug</h2>
-            <p className="mt-1 text-[13px] text-text-muted">Track bugs from any source - Excel, email, client calls, QA testing</p>
-            
-            <form onSubmit={handleCreate} className="mt-6 space-y-5">
-              {/* Title */}
               <div>
-                <label className="block text-[13px] font-medium text-foreground">
-                  Title <span className="text-danger">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  placeholder="e.g., Login button not working on mobile"
-                  required
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground placeholder:text-text-dim focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
-                />
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block text-[13px] font-medium text-foreground">
-                  Description <span className="text-danger">*</span>
-                </label>
-                <p className="mt-1 text-[12px] text-text-dim">Full bug details, steps to reproduce, expected vs actual behavior</p>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Describe the bug in detail..."
-                  rows={4}
-                  required
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground placeholder:text-text-dim focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
-                />
-              </div>
-
-              {/* Source */}
-              <div>
-                <label className="block text-[13px] font-medium text-foreground">
-                  Source <span className="text-danger">*</span>
-                </label>
-                <p className="mt-1 text-[12px] text-text-dim">Where did this bug come from?</p>
-                <input
-                  type="text"
-                  value={formData.source}
-                  onChange={(e) => setFormData({ ...formData, source: e.target.value })}
-                  placeholder="e.g., Client email, Excel sheet, QA testing, Production monitoring"
-                  required
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground placeholder:text-text-dim focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
-                />
-              </div>
-
-              {/* Severity */}
-              <div>
-                <label className="block text-[13px] font-medium text-foreground">
-                  Severity <span className="text-danger">*</span>
-                </label>
-                <select
-                  value={formData.severity}
-                  onChange={(e) => setFormData({ ...formData, severity: e.target.value })}
-                  required
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
-                >
-                  <option value="LOW">Low</option>
-                  <option value="MEDIUM">Medium</option>
-                  <option value="HIGH">High</option>
-                  <option value="CRITICAL">Critical</option>
-                </select>
-              </div>
-
-              {/* Project */}
-              <div>
-                <label className="block text-[13px] font-medium text-foreground">
-                  Project <span className="text-danger">*</span>
-                </label>
-                <p className="mt-1 text-[12px] text-text-dim">Every bug needs a project so it shows up on that project's page</p>
-                <select
-                  value={formData.projectId}
-                  onChange={(e) =>
-                    setFormData({ ...formData, projectId: e.target.value, featureId: "" })
-                  }
-                  required
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20"
-                >
-                  <option value="">Select a project</option>
-                  {projects?.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Link to Feature (Optional) */}
-              <div>
-                <label className="block text-[13px] font-medium text-foreground">
-                  Link to Feature (Optional)
-                </label>
-                <p className="mt-1 text-[12px] text-text-dim">If this bug is related to an existing feature, link it for traceability</p>
-                <select
-                  value={formData.featureId}
-                  onChange={(e) => setFormData({ ...formData, featureId: e.target.value })}
-                  disabled={!formData.projectId}
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary-soft/20 disabled:opacity-50"
-                >
+                <label className="text-[12px] font-medium">Link to feature (optional)</label>
+                <select value={form.featureId} onChange={(e) => setForm({ ...form, featureId: e.target.value })} disabled={!form.projectId} className="mt-1.5 h-9 w-full rounded-md border border-border bg-surface px-3 text-[13px] outline-none disabled:opacity-50">
                   <option value="">No feature linked</option>
-                  {features?.map((feature) => (
-                    <option key={feature.id} value={feature.id}>
-                      {feature.title}
-                    </option>
-                  ))}
+                  {features?.map((f) => <option key={f.id} value={f.id}>{f.title}</option>)}
                 </select>
               </div>
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="flex-1 rounded-lg border border-border bg-surface-2 px-4 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-surface"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={createBug.isPending}
-                  className="flex-1 rounded-lg bg-primary px-4 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-primary-hover disabled:opacity-50"
-                >
-                  {createBug.isPending ? "Reporting..." : "Report Bug"}
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setShowCreate(false)} className="h-8 rounded-md border border-border px-3 text-[12px]">Cancel</button>
+                <button type="submit" disabled={createBug.isPending} className="h-8 rounded-md bg-primary px-3 text-[12px] font-medium text-primary-foreground disabled:opacity-50">
+                  {createBug.isPending ? "Reporting…" : "Report bug"}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
