@@ -33,7 +33,12 @@ export default function TeamPage() {
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    try { await createInvitation.mutateAsync(form); setShowInvite(false); setForm({ email: "", role: "DEVELOPER" }); }
+    try {
+      const result = await createInvitation.mutateAsync(form);
+      setShowInvite(false);
+      setForm({ email: "", role: "DEVELOPER" });
+      if (!result.emailSent) setError(`Invitation created but the email to ${result.email} could not be delivered. Use Resend to retry.`);
+    }
     catch (err: any) { setError(err.response?.data?.message || "Failed to send invitation"); }
   };
 

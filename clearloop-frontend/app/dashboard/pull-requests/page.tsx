@@ -139,6 +139,11 @@ export default function PullRequestsPage() {
           <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-lg border border-border bg-[var(--popover)] p-5 shadow-xl">
             <h2 className="text-[16px] font-semibold">Link pull request</h2>
             <p className="mt-1 text-[12px] text-muted-foreground">Select the feature this pull request delivers.</p>
+            {linkMutation.isError && (
+              <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+                Failed to link pull request. Please try again.
+              </div>
+            )}
             <select value={featureId} onChange={(e) => setFeatureId(e.target.value)} className="mt-5 h-9 w-full rounded-md border border-border bg-surface px-3 text-[13px] outline-none focus:border-primary">
               <option value="">Select a feature</option>
               {features?.map((f) => <option key={f.id} value={f.id}>{f.title} · {f.status}</option>)}

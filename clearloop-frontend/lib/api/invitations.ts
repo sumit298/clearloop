@@ -12,6 +12,10 @@ export interface Invitation {
   updatedAt: string;
 }
 
+export interface CreateInvitationResponse extends Invitation {
+  emailSent: boolean;
+}
+
 export interface CreateInvitationData {
   email: string;
   role: Invitation['role'];
@@ -25,7 +29,7 @@ export const invitationsApi = {
   },
 
   // Create invitation
-  create: async (data: CreateInvitationData): Promise<Invitation> => {
+  create: async (data: CreateInvitationData): Promise<CreateInvitationResponse> => {
     const response = await apiClient.post('/invitations', data);
     return response.data;
   },

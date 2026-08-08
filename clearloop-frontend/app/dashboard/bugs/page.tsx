@@ -128,6 +128,11 @@ export default function BugsPage() {
             <h2 className="text-[16px] font-semibold">Report bug</h2>
             <p className="mt-1 text-[12px] text-muted-foreground">Track bugs from any source — Excel, email, client calls, QA testing.</p>
             <form onSubmit={handleCreate} className="mt-5 space-y-4">
+              {createBug.isError && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+                  Failed to report bug. Please try again.
+                </div>
+              )}
               <div>
                 <label className="text-[12px] font-medium">Title *</label>
                 <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required placeholder="e.g. Login button not working on mobile" className="mt-1.5 h-9 w-full rounded-md border border-border bg-surface px-3 text-[13px] outline-none focus:border-primary" />

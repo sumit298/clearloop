@@ -151,6 +151,11 @@ export default function FeaturesPage() {
             <h2 className="text-[16px] font-semibold">New feature</h2>
             <p className="mt-1 text-[12px] text-muted-foreground">Track a new feature from client request to release.</p>
             <form onSubmit={handleCreate} className="mt-5 space-y-4">
+              {createFeature.isError && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+                  Failed to create feature. Please try again.
+                </div>
+              )}
               <div>
                 <label className="text-[12px] font-medium">Title *</label>
                 <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required placeholder="e.g. Add dark mode support" className="mt-1.5 h-9 w-full rounded-md border border-border bg-surface px-3 text-[13px] outline-none focus:border-primary" />

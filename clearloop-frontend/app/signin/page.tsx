@@ -90,7 +90,13 @@ export default function SignIn() {
       }
     >
       {workspaces.length ? (
-        <div className="panel overflow-hidden">
+        <>
+          {error && (
+            <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+              {error}
+            </div>
+          )}
+          <div className="panel overflow-hidden">
           {workspaces.map((workspace) => (
             <button
               key={workspace.id}
@@ -105,18 +111,19 @@ export default function SignIn() {
                 <span className="block truncate text-[14px] font-medium">
                   {workspace.name}
                 </span>
-                <span className="font-mono text-[11px] text-text-muted">
+                <span className="font-mono text-[11px] text-muted-foreground">
                   clearloop.app/{workspace.slug}
                 </span>
               </span>
-              <span className="text-text-muted">→</span>
+              <span className="text-muted-foreground">→</span>
             </button>
           ))}
-        </div>
+          </div>
+        </>
       ) : (
         <form className="space-y-4" onSubmit={signIn}>
           {error && (
-            <div className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-[12px] text-danger">
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
               {error}
             </div>
           )}
@@ -135,7 +142,7 @@ export default function SignIn() {
           </button>
           <div className="flex items-center gap-3">
             <span className="h-px flex-1 bg-border" />
-            <span className="font-mono text-[10px] uppercase tracking-widest text-text-muted">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
               or email
             </span>
             <span className="h-px flex-1 bg-border" />
@@ -192,7 +199,7 @@ function AuthFrame({
       <main className="flex flex-col px-6 py-8 sm:px-12">
         <Link
           href="/"
-          className="inline-flex w-fit items-center gap-2 text-[13px] text-text-muted hover:text-foreground"
+          className="inline-flex w-fit items-center gap-2 text-[13px] text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-3.5" />
           Back
@@ -203,9 +210,9 @@ function AuthFrame({
             <h1 className="mt-6 text-[24px] font-semibold leading-tight">
               {title}
             </h1>
-            <p className="mt-2 text-[13px] text-text-muted">{subtitle}</p>
+            <p className="mt-2 text-[13px] text-muted-foreground">{subtitle}</p>
             <div className="mt-8">{children}</div>
-            <div className="mt-6 text-[12px] text-text-muted">{footer}</div>
+            <div className="mt-6 text-[12px] text-muted-foreground">{footer}</div>
           </div>
         </div>
       </main>
@@ -220,12 +227,12 @@ function AuthFrame({
               “We deleted our weekly status doc the day we connected the first
               repo.”
             </p>
-            <p className="mt-3 text-[12px] text-text-muted">
+            <p className="mt-3 text-[12px] text-muted-foreground">
               Miles Cheng · Engineering Manager, Northwind Labs
             </p>
           </div>
           <div className="panel max-w-sm overflow-hidden">
-            <div className="border-b border-border px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-text-muted">
+            <div className="border-b border-border px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
               Live activity
             </div>
             {[
@@ -238,8 +245,8 @@ function AuthFrame({
                 key={item}
                 className="flex gap-3 border-b border-border px-4 py-2 text-[12px] last:border-b-0"
               >
-                <span className="min-w-0 flex-1 text-text-muted">{item}</span>
-                <span className="font-mono text-[10px] text-text-muted">
+                <span className="min-w-0 flex-1 text-muted-foreground">{item}</span>
+                <span className="font-mono text-[10px] text-muted-foreground">
                   {index + 1}h
                 </span>
               </div>

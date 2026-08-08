@@ -120,6 +120,11 @@ export default function ReleasesPage() {
             <h2 className="text-[16px] font-semibold">Cut release</h2>
             <p className="mt-1 text-[12px] text-muted-foreground">Select features and generate AI-powered release notes.</p>
             <form onSubmit={handleCreate} className="mt-5 space-y-4">
+              {(createRelease.isError || generateNotes.isError) && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+                  {generateNotes.isError ? "Failed to generate notes. Please try again." : "Failed to publish release. Please try again."}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[12px] font-medium">Version *</label>
