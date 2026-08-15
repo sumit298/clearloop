@@ -121,7 +121,11 @@ export class EmailService {
       });
 
       if (!response.ok) {
-        throw new Error(`Brevo API error: ${response.statusText}`);
+        const errorBody = await response.text();
+
+        throw new Error(
+          `Brevo API error: ${response.status} ${response.statusText} - ${errorBody}`,
+        );
       }
 
       return { success: true };
