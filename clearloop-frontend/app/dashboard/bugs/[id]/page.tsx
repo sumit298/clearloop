@@ -6,12 +6,39 @@ import { Bug as BugIcon, CircleDot, GitCommitHorizontal, ShieldAlert } from "luc
 import { PageHeader, EmptyState, Section } from "@/components/clearloop/primitives";
 import { DetailShell, RailGroup, RailRow, Stat, Timeline } from "@/components/clearloop/detail";
 import { SeverityChip, BugStatusChip, Chip } from "@/components/clearloop/status";
-import { useBug } from "@/lib/hooks/useBugs";
+import {
+  BUG_STATUSES,
+  StatusAdvanceButton,
+  StatusSelect,
+  nextBugStatus,
+} from "@/components/clearloop/status-select";
+import { useBug, useUpdateBug } from "@/lib/hooks/useBugs";
+import type { UpdateBugReportData } from "@/lib/api/bugs";
+import { getErrorMessage } from "@/lib/api/errors";
+import { useState } from "react";
 
 export default function BugDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { data: bug, isLoading, error } = useBug(params.id as string);
+  const updateBug = useUpdateBug();
+  const [statusError, setStatusError] = useState("");
+
+  const changeStatus = (status: string) => {
+    setStatusError("");
+    updateBug.mutate(
+      {
+        id: params.id as string,
+        data: { status: status as UpdateBugReportData["status"] },
+      },
+      {
+        onError: (mutationError) =>
+          setStatusError(
+            getErrorMessage(mutationError, "Could not update the status."),
+          ),
+      },
+    );
+  };
 
   if (isLoading) return <div className="flex h-full items-center justify-center text-[13px] text-muted-foreground">Loading…</div>;
   if (error || !bug) return (
@@ -27,6 +54,7 @@ export default function BugDetailPage() {
   const sourceMatch = bug.description?.match(/\*\*Source:\*\*\s*(.+?)\n/);
   const source = sourceMatch ? sourceMatch[1] : "Unknown";
   const description = bug.description?.replace(/\*\*Source:\*\*\s*.+?\n\n/, "") ?? "";
+  const advance = nextBugStatus(bug.status);
 
   return (
     <>
@@ -41,7 +69,22 @@ export default function BugDetailPage() {
             <Chip label={source} tone="slate" dot={false} />
           </>
         }
+        actions={
+          advance ? (
+            <StatusAdvanceButton
+              label={advance.label}
+              pending={updateBug.isPending}
+              onClick={() => changeStatus(advance.value)}
+            />
+          ) : undefined
+        }
       />
+
+      {statusError && (
+        <div className="border-b border-destructive/40 bg-destructive/10 px-6 py-2 text-[12px] text-destructive">
+          {statusError}
+        </div>
+      )}
 
       <DetailShell
         main={
@@ -65,8 +108,13 @@ export default function BugDetailPage() {
               <Timeline
                 events={[
                   { icon: BugIcon, actor: bug.reportedBy?.name, text: <>filed this bug from {source}</>, time: fmt(bug.createdAt) },
-                  ...(bug.status === "IN_PROGRESS" || bug.status === "RESOLVED"
-                    ? [{ icon: ShieldAlert, text: <>status changed to {bug.status.replace("_", " ").toLowerCase()}</>, time: "—" }]
+                  // Only stamped transitions appear — an undated "status
+                  // changed" row told the reader nothing it could act on.
+                  ...(bug.resolvedAt
+                    ? [{ icon: ShieldAlert, text: <>marked resolved</>, time: fmt(bug.resolvedAt) }]
+                    : []),
+                  ...(bug.closedAt
+                    ? [{ icon: ShieldAlert, text: <>closed</>, time: fmt(bug.closedAt) }]
                     : []),
                 ]}
               />
@@ -76,10 +124,19 @@ export default function BugDetailPage() {
         rail={
           <>
             <RailGroup title="Properties">
-              <RailRow label="Status"><BugStatusChip status={bug.status} /></RailRow>
+              <RailRow label="Status">
+                <StatusSelect
+                  value={bug.status}
+                  options={BUG_STATUSES}
+                  pending={updateBug.isPending}
+                  onSelect={changeStatus}
+                  renderChip={(status) => <BugStatusChip status={status} />}
+                />
+              </RailRow>
               <RailRow label="Severity"><SeverityChip severity={bug.severity} /></RailRow>
               <RailRow label="Source"><Chip label={source} tone="slate" dot={false} /></RailRow>
               <RailRow label="Filed"><span className="font-mono text-[12px] text-muted-foreground">{fmt(bug.createdAt)}</span></RailRow>
+              {bug.resolvedAt && <RailRow label="Resolved"><span className="font-mono text-[12px] text-muted-foreground">{fmt(bug.resolvedAt)}</span></RailRow>}
             </RailGroup>
 
             <RailGroup title="People">

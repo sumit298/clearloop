@@ -372,6 +372,11 @@ model WorkspaceMember {
   invitedByMemberId String?
   joinedAt        DateTime?
 
+  // Set when the member dismisses the role onboarding panel. Per-membership
+  // rather than per-user: the same person joining a second workspace starts
+  // that workspace's onboarding fresh, and may hold a different role there.
+  onboardingDismissedAt DateTime?
+
   // Useful for active-user metrics.
   lastActiveAt DateTime?
 

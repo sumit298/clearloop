@@ -26,22 +26,11 @@ export class EmailService {
   ) {
     const invitationUrl = `${this.frontendUrl}/join?token=${invitationToken}`;
 
-    const escapeHtml = (value: string) =>
-      value
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&`#39`;');
+    const safeInviterName = this.escapeHtml(inviterName);
+    const safeWorkspaceName = this.escapeHtml(workspaceName);
 
-    const safeInviterName = escapeHtml(inviterName);
-    const safeWorkspaceName = escapeHtml(workspaceName);
-    const emailData = {
-      sender: {
-        name: this.senderName,
-        email: this.senderEmail,
-      },
-      to: [{ email: to }],
+    return this.send({
+      to,
       subject: `${safeInviterName} invited you to join ${safeWorkspaceName} on ClearLoop`,
       htmlContent: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -62,6 +51,62 @@ export class EmailService {
           </p>
         </div>
       `,
+    });
+  }
+
+  async sendPasswordResetEmail(to: string, resetToken: string, name?: string) {
+    const resetUrl = `${this.frontendUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
+    const greeting = name ? `Hi ${this.escapeHtml(name)},` : 'Hi,';
+
+    return this.send({
+      to,
+      subject: 'Reset your ClearLoop password',
+      htmlContent: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Reset your password</h2>
+          <p>${greeting}</p>
+          <p>We received a request to reset the password for your ClearLoop account.</p>
+          <p>
+            <a href="${resetUrl}"
+               style="background-color: #4F46E5; color: white; padding: 12px 24px;
+                      text-decoration: none; border-radius: 6px; display: inline-block;">
+              Reset Password
+            </a>
+          </p>
+          <p style="color: #666; font-size: 14px;">
+            This link will expire in 1 hour and can only be used once.
+          </p>
+          <p style="color: #666; font-size: 12px;">
+            If you didn't request a password reset, you can safely ignore this
+            email — your password will not change.
+          </p>
+        </div>
+      `,
+    });
+  }
+
+  private escapeHtml(value: string) {
+    return value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  private async send(params: {
+    to: string;
+    subject: string;
+    htmlContent: string;
+  }) {
+    const emailData = {
+      sender: {
+        name: this.senderName,
+        email: this.senderEmail,
+      },
+      to: [{ email: params.to }],
+      subject: params.subject,
+      htmlContent: params.htmlContent,
     };
 
     try {

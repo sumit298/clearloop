@@ -9,6 +9,36 @@ import type {
   UpdateFeatureDto,
 } from './dto/create-feature.dto';
 
+/**
+ * Derives the lifecycle timestamps from a status transition. Without this the
+ * columns stay null forever and anything asking "how much shipped last week"
+ * has no data to read.
+ *
+ * Stamps are set on the way in and cleared on the way back out, so reopening a
+ * feature does not leave it looking permanently delivered.
+ */
+function lifecycleStamps(
+  existing: { status: string; startedAt: Date | null; completedAt: Date | null },
+  nextStatus: string | undefined,
+) {
+  if (!nextStatus || nextStatus === existing.status) return {};
+
+  const now = new Date();
+  const stamps: { startedAt?: Date | null; completedAt?: Date | null } = {};
+
+  const hasStarted = nextStatus !== 'BACKLOG' && nextStatus !== 'PLANNED';
+  if (hasStarted && !existing.startedAt) stamps.startedAt = now;
+  if (!hasStarted) stamps.startedAt = null;
+
+  if (nextStatus === 'DONE') {
+    stamps.completedAt = existing.completedAt ?? now;
+  } else if (existing.completedAt) {
+    stamps.completedAt = null;
+  }
+
+  return stamps;
+}
+
 @Injectable()
 export class FeaturesService {
   constructor(private prisma: PrismaService) {}
@@ -142,7 +172,7 @@ export class FeaturesService {
 
     const feature = await this.prisma.feature.update({
       where: { id },
-      data: dto,
+      data: { ...dto, ...lifecycleStamps(existing, dto.status) },
       include: {
         createdBy: { select: { id: true, name: true, email: true}},
         assignedTo: { select: { id: true, name: true, email: true}},

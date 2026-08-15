@@ -10,6 +10,10 @@ export interface Feature {
   projectId: string;
   createdById: string;
   assignedToId?: string;
+  startedAt?: string;
+  /** Set when the feature reaches DONE. Drives the delivery trend chart. */
+  completedAt?: string;
+  releasedAt?: string;
   createdAt: string;
   updatedAt: string;
   // Relations

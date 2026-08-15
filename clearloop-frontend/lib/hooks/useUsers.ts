@@ -8,6 +8,26 @@ export function useUsers() {
   });
 }
 
+/** The signed-in member, including role and onboarding state. */
+export function useMe() {
+  return useQuery({
+    queryKey: ['users', 'me'],
+    queryFn: usersApi.getMe,
+  });
+}
+
+export function useUpdateMe() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: UpdateUserData) => usersApi.updateMe(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users', 'me'] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+}
+
 export function useUser(id: string) {
   return useQuery({
     queryKey: ['users', id],
