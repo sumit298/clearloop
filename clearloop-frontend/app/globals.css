@@ -26,6 +26,10 @@
   --color-success: var(--hue-green);
   --color-warning: var(--hue-amber);
   --color-danger: var(--destructive);
+  /* Without this, `text-destructive` / `bg-destructive/10` are unknown
+     utilities and error text renders in the default ink instead of red. */
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--primary-foreground);
 }
 
 :root {
@@ -52,6 +56,33 @@
   --hue-violet: oklch(0.55 0.22 302);
   --hue-orange: oklch(0.65 0.18 50);
   --hue-slate: oklch(0.53 0.012 285);
+
+  /* Chart palette. Values are validated, not eyeballed — categorical slots
+     clear CVD ΔE >= 8 (protan/deuteran) and 3:1 contrast on the light surface;
+     the ordinal ramp holds hue 302 with monotone lightness and >= 0.06 steps.
+     Re-run the validator before changing any of these. */
+  --chart-1: oklch(0.55 0.18 255);
+  --chart-2: oklch(0.65 0.18 50);
+
+  /* Ordinal ramp: pipeline stage. Light mode runs light -> dark. */
+  --chart-ord-1: oklch(0.78 0.1 302);
+  --chart-ord-2: oklch(0.7 0.14 302);
+  --chart-ord-3: oklch(0.62 0.18 302);
+  --chart-ord-4: oklch(0.54 0.21 302);
+  --chart-ord-5: oklch(0.46 0.22 302);
+
+  /* Ink for labels set *inside* a ramp fill — picked per step by whichever of
+     white/near-black has the higher contrast against that step, so an in-bar
+     number never sits dark-on-dark or light-on-light. */
+  --chart-ord-1-ink: oklch(0.21 0.01 285);
+  --chart-ord-2-ink: oklch(0.21 0.01 285);
+  --chart-ord-3-ink: oklch(0.21 0.01 285);
+  --chart-ord-4-ink: oklch(1 0 0);
+  --chart-ord-5-ink: oklch(1 0 0);
+  --chart-slate-ink: oklch(1 0 0);
+
+  --chart-grid: oklch(0.93 0.004 285);
+
   --sidebar: oklch(0.975 0.002 285);
   --sidebar-foreground: oklch(0.3 0.01 285);
   --sidebar-accent: oklch(0.945 0.005 285);
@@ -79,6 +110,29 @@
   --hue-violet: oklch(0.72 0.2 302);
   --hue-orange: oklch(0.78 0.16 50);
   --hue-slate: oklch(0.66 0.011 285);
+
+  /* Dark steps are chosen against the dark surface, not flipped from light:
+     the categorical slots drop into the 0.48–0.67 band, and the ordinal ramp
+     reverses its anchor so magnitude still reads as "more ink". */
+  --chart-1: oklch(0.64 0.18 255);
+  --chart-2: oklch(0.66 0.17 50);
+
+  --chart-ord-1: oklch(0.42 0.13 302);
+  --chart-ord-2: oklch(0.5 0.17 302);
+  --chart-ord-3: oklch(0.58 0.2 302);
+  --chart-ord-4: oklch(0.66 0.21 302);
+  --chart-ord-5: oklch(0.74 0.19 302);
+
+  /* The ramp reverses in dark mode, so the ink assignments reverse with it. */
+  --chart-ord-1-ink: oklch(1 0 0);
+  --chart-ord-2-ink: oklch(1 0 0);
+  --chart-ord-3-ink: oklch(1 0 0);
+  --chart-ord-4-ink: oklch(0.21 0.01 285);
+  --chart-ord-5-ink: oklch(0.21 0.01 285);
+  --chart-slate-ink: oklch(0.21 0.01 285);
+
+  --chart-grid: oklch(0.26 0.007 285);
+
   --sidebar: oklch(0.18 0.006 285);
   --sidebar-foreground: oklch(0.78 0.008 285);
   --sidebar-accent: oklch(0.245 0.008 285);

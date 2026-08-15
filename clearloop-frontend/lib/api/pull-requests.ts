@@ -7,13 +7,22 @@ export interface PullRequest {
   status: 'OPEN' | 'MERGED' | 'CLOSED';
   githubPrId: string;
   githubPrUrl: string;
+  githubPrNumber?: number;
+  isDraft?: boolean;
   author: string;
+  authorGithubLogin?: string;
   branchName?: string;
+  baseBranch?: string;
+  headBranch?: string;
+  githubCreatedAt?: string;
   mergedAt?: string;
+  closedAt?: string;
   createdAt: string;
   updatedAt: string;
   featureId?: string;
+  aiStatus?: 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'FAILED';
   aiSummary?: string;
+  aiRisk?: string;
   // Relations
   feature?: {
     id: string;
@@ -23,6 +32,10 @@ export interface PullRequest {
       id: string;
       name: string;
     };
+  };
+  repository?: {
+    id: string;
+    fullName: string;
   };
 }
 

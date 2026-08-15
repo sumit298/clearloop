@@ -9,6 +9,9 @@ export interface BugReport {
   featureId?: string;
   projectId?: string;
   reportedById: string;
+  /** Set when the bug reaches RESOLVED. Drives the delivery trend chart. */
+  resolvedAt?: string;
+  closedAt?: string;
   createdAt: string;
   updatedAt: string;
   // Relations

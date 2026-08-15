@@ -31,6 +31,10 @@ export interface AuthResponse {
   }>;
 }
 
+export interface MessageResponse {
+  message: string;
+}
+
 export const authApi = {
   // Register new workspace + admin user
   register: async (data: RegisterData): Promise<AuthResponse> => {
@@ -41,6 +45,25 @@ export const authApi = {
   // Login with email (finds workspace automatically)
   login: async (data: LoginData): Promise<AuthResponse> => {
     const response = await apiClient.post("/auth/login", data);
+    return response.data;
+  },
+
+  // Send a password reset link. Response is deliberately generic — the
+  // backend does not reveal whether the email has an account.
+  forgotPassword: async (email: string): Promise<MessageResponse> => {
+    const response = await apiClient.post("/auth/forgot-password", { email });
+    return response.data;
+  },
+
+  // Consume a reset token and set a new password
+  resetPassword: async (
+    token: string,
+    password: string,
+  ): Promise<MessageResponse> => {
+    const response = await apiClient.post("/auth/reset-password", {
+      token,
+      password,
+    });
     return response.data;
   },
 

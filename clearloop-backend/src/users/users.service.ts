@@ -17,6 +17,7 @@ const MEMBER_SELECT = {
   isActive: true,
   githubUsername: true,
   avatarUrl: true,
+  onboardingDismissedAt: true,
 } as const;
 
 @Injectable()
@@ -121,9 +122,18 @@ export class UserService {
 
     if (!existing) throw new NotFoundException('User not found');
 
+    // dismissOnboarding is an intent, not a column — translate it here rather
+    // than letting it reach Prisma as an unknown field.
+    const { dismissOnboarding, ...profile } = dto;
+
     return this.prisma.workspaceMember.update({
       where: { id: memberId },
-      data: dto,
+      data: {
+        ...profile,
+        ...(dismissOnboarding !== undefined && {
+          onboardingDismissedAt: dismissOnboarding ? new Date() : null,
+        }),
+      },
       select: MEMBER_SELECT,
     });
   }

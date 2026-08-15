@@ -8,12 +8,24 @@ import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { RegisterDto, LoginDto } from './dto/auth.dto';
+import { EmailService } from '../email/email.service';
+
+// Reset tokens are looked up by hash, so the digest must be deterministic.
+// Same approach as invitations: raw token to the user, digest in the DB.
+function hashToken(rawToken: string): string {
+  return crypto.createHash('sha256').update(rawToken).digest('hex');
+}
+
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+const RESET_REQUEST_WINDOW_MS = 15 * 60 * 1000;
+const RESET_REQUESTS_PER_WINDOW = 3;
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
+    private email: EmailService,
   ) {}
 
   // ---------------------------------------------------------------------
@@ -123,6 +135,120 @@ export class AuthService {
     }
 
     return this.createLoginSession(user.id, memberships);
+  }
+
+  // ---------------------------------------------------------------------
+  // Password reset
+  // ---------------------------------------------------------------------
+
+  // Always resolves to the same generic response so an unauthenticated
+  // caller cannot use this endpoint to discover which emails have accounts.
+  async requestPasswordReset(rawEmail: string, ipAddress?: string) {
+    const genericResponse = {
+      message:
+        'If an account exists for that email, a reset link has been sent.',
+    };
+
+    const email = rawEmail.toLowerCase();
+    const user = await this.prisma.user.findUnique({ where: { email } });
+
+    if (!user || !user.isActive) {
+      return genericResponse;
+    }
+
+    const recentRequests = await this.prisma.passwordResetToken.count({
+      where: {
+        userId: user.id,
+        createdAt: { gt: new Date(Date.now() - RESET_REQUEST_WINDOW_MS) },
+      },
+    });
+
+    if (recentRequests >= RESET_REQUESTS_PER_WINDOW) {
+      return genericResponse;
+    }
+
+    // Any earlier link becomes dead the moment a new one is issued.
+    await this.prisma.passwordResetToken.updateMany({
+      where: { userId: user.id, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+
+    await this.prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: hashToken(rawToken),
+        expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+        ipAddress,
+      },
+    });
+
+    // Deliberately not awaited. Awaiting it would make a request for a real
+    // account take as long as the Brevo call (up to 10s) while an unknown
+    // address returns immediately — a timing oracle that hands back exactly
+    // the account-existence answer the generic message is hiding.
+    void this.email
+      .sendPasswordResetEmail(user.email, rawToken, user.name ?? undefined)
+      .catch((error) => {
+        console.error('Failed to send password reset email:', error);
+      });
+
+    return genericResponse;
+  }
+
+  async resetPassword(rawToken: string, newPassword: string) {
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash: hashToken(rawToken) },
+      include: { user: true },
+    });
+
+    // BadRequest, not Unauthorized: a 401 would trip the frontend's
+    // "session expired" interceptor and bounce the user off the page.
+    if (
+      !resetToken ||
+      resetToken.usedAt ||
+      resetToken.expiresAt < new Date() ||
+      !resetToken.user.isActive
+    ) {
+      throw new BadRequestException(
+        'This reset link is invalid or has expired. Please request a new one.',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: resetToken.userId },
+        data: { passwordHash },
+      });
+
+      await tx.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { usedAt: new Date() },
+      });
+
+      // Kill every other outstanding reset link for this user.
+      await tx.passwordResetToken.updateMany({
+        where: { userId: resetToken.userId, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+
+      // Bumping tokenVersion invalidates every JWT already issued for this
+      // user's memberships, so a stolen session dies with the reset.
+      await tx.workspaceMember.updateMany({
+        where: { userId: resetToken.userId },
+        data: { tokenVersion: { increment: 1 } },
+      });
+
+      await tx.loginSession.updateMany({
+        where: { userId: resetToken.userId, status: 'PENDING' },
+        data: { status: 'EXPIRED' },
+      });
+    });
+
+    return { message: 'Password updated. You can now sign in.' };
   }
 
   // ---------------------------------------------------------------------

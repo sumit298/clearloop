@@ -9,6 +9,8 @@ export interface User {
   githubUsername?: string;
   avatarUrl?: string;
   isActive: boolean;
+  /** Set once this member dismisses the onboarding panel; null means show it. */
+  onboardingDismissedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -26,6 +28,8 @@ export interface UpdateUserData {
   role?: string;
   designation?: string;
   githubUsername?: string;
+  /** Own-profile only. true stamps the dismissal, false brings the panel back. */
+  dismissOnboarding?: boolean;
 }
 
 export const usersApi = {

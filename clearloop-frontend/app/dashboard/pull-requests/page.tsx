@@ -87,7 +87,9 @@ export default function PullRequestsPage() {
                       : "text-muted-foreground"
                     }`}
                   />
-                  <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium">{pr.title}</span>
+                  <Link href={`/dashboard/pull-requests/${pr.id}`} className="min-w-0 flex-1 truncate text-[13.5px] font-medium hover:underline">
+                    {pr.title}
+                  </Link>
                   {pr.feature && (
                     <span className="hidden shrink-0 rounded border border-border px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground lg:block">
                       {pr.feature.title}

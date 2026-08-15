@@ -6,12 +6,35 @@ import { Bug as BugIcon, CircleDot, GitCommitHorizontal, GitPullRequest } from "
 import { PageHeader, EmptyState, Section } from "@/components/clearloop/primitives";
 import { DetailShell, RailGroup, RailRow, Stat, Timeline } from "@/components/clearloop/detail";
 import { StatusChip, PriorityChip, PrStatusChip } from "@/components/clearloop/status";
-import { useFeature } from "@/lib/hooks/useFeatures";
+import {
+  FEATURE_STATUSES,
+  StatusAdvanceButton,
+  StatusSelect,
+  nextFeatureStatus,
+} from "@/components/clearloop/status-select";
+import { useFeature, useUpdateFeature } from "@/lib/hooks/useFeatures";
+import { getErrorMessage } from "@/lib/api/errors";
+import { useState } from "react";
 
 export default function FeatureDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { data: feature, isLoading, error } = useFeature(params.id as string);
+  const updateFeature = useUpdateFeature();
+  const [statusError, setStatusError] = useState("");
+
+  const changeStatus = (status: string) => {
+    setStatusError("");
+    updateFeature.mutate(
+      { id: params.id as string, data: { status } },
+      {
+        onError: (mutationError) =>
+          setStatusError(
+            getErrorMessage(mutationError, "Could not update the status."),
+          ),
+      },
+    );
+  };
 
   if (isLoading) return <div className="flex h-full items-center justify-center text-[13px] text-muted-foreground">Loading…</div>;
   if (error || !feature) return (
@@ -24,6 +47,7 @@ export default function FeatureDetailPage() {
   );
 
   const fmt = (d: string) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const advance = nextFeatureStatus(feature.status);
 
   return (
     <>
@@ -42,7 +66,22 @@ export default function FeatureDetailPage() {
             <PriorityChip priority={feature.priority} />
           </>
         }
+        actions={
+          advance ? (
+            <StatusAdvanceButton
+              label={advance.label}
+              pending={updateFeature.isPending}
+              onClick={() => changeStatus(advance.value)}
+            />
+          ) : undefined
+        }
       />
+
+      {statusError && (
+        <div className="border-b border-destructive/40 bg-destructive/10 px-6 py-2 text-[12px] text-destructive">
+          {statusError}
+        </div>
+      )}
 
       <DetailShell
         main={
@@ -100,9 +139,19 @@ export default function FeatureDetailPage() {
         rail={
           <>
             <RailGroup title="Properties">
-              <RailRow label="Status"><StatusChip status={feature.status} /></RailRow>
+              <RailRow label="Status">
+                <StatusSelect
+                  value={feature.status}
+                  options={FEATURE_STATUSES}
+                  pending={updateFeature.isPending}
+                  onSelect={changeStatus}
+                  renderChip={(status) => <StatusChip status={status} />}
+                />
+              </RailRow>
               <RailRow label="Priority"><PriorityChip priority={feature.priority} /></RailRow>
               <RailRow label="Created"><span className="font-mono text-[12px] text-muted-foreground">{fmt(feature.createdAt)}</span></RailRow>
+              {feature.startedAt && <RailRow label="Started"><span className="font-mono text-[12px] text-muted-foreground">{fmt(feature.startedAt)}</span></RailRow>}
+              {feature.completedAt && <RailRow label="Completed"><span className="font-mono text-[12px] text-muted-foreground">{fmt(feature.completedAt)}</span></RailRow>}
               {feature.assignedTo && <RailRow label="Assignee"><span className="text-[13px]">{feature.assignedTo.name}</span></RailRow>}
               {feature.createdBy && <RailRow label="Created by"><span className="text-[13px]">{feature.createdBy.name}</span></RailRow>}
             </RailGroup>

@@ -7,6 +7,37 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBugReportDto, UpdateBugReportDto } from './dto/bug-report.dto';
 
+/**
+ * Derives resolvedAt/closedAt from a status transition. These columns exist in
+ * the schema but nothing wrote them, so "bugs resolved per week" had no source.
+ *
+ * Reopening a bug clears the stamps rather than leaving stale ones behind.
+ */
+function bugLifecycleStamps(
+  existing: { status: string; resolvedAt: Date | null; closedAt: Date | null },
+  nextStatus: string | undefined,
+) {
+  if (!nextStatus || nextStatus === existing.status) return {};
+
+  const now = new Date();
+  const stamps: { resolvedAt?: Date | null; closedAt?: Date | null } = {};
+  const isSettled = nextStatus === 'RESOLVED' || nextStatus === 'CLOSED';
+
+  if (isSettled) {
+    stamps.resolvedAt = existing.resolvedAt ?? now;
+  } else if (existing.resolvedAt) {
+    stamps.resolvedAt = null;
+  }
+
+  if (nextStatus === 'CLOSED') {
+    stamps.closedAt = existing.closedAt ?? now;
+  } else if (existing.closedAt) {
+    stamps.closedAt = null;
+  }
+
+  return stamps;
+}
+
 @Injectable()
 export class BugReportsService {
   constructor(private prisma: PrismaService) {}
@@ -227,7 +258,11 @@ export class BugReportsService {
     const updated = await this.prisma.$transaction(async (tx) => {
       const result = await tx.bugReport.update({
         where: { id },
-        data: { ...dto, ...(projectId !== undefined && { projectId }) },
+        data: {
+          ...dto,
+          ...(projectId !== undefined && { projectId }),
+          ...bugLifecycleStamps(bugReport, dto.status),
+        },
         include: {
           feature: {
             select: { id: true, title: true },
