@@ -42,10 +42,13 @@ function JoinForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  // The invited person's name is only known once the lookup lands.
+  // Seed the name from the invited email, keyed on the email itself. Guarding
+  // on `!name` instead would carry a name typed for one invitation over to a
+  // different one if the component stays mounted across tokens.
+  const invitedEmail = invitation?.email;
   useEffect(() => {
-    if (invitation && !name) setName(invitation.email.split("@")[0] ?? "");
-  }, [invitation, name]);
+    if (invitedEmail) setName(invitedEmail.split("@")[0] ?? "");
+  }, [invitedEmail]);
 
   if (!token) {
     return (
@@ -93,7 +96,7 @@ function JoinForm() {
         }
       >
         <div className="flex items-start gap-3 rounded-md border border-border bg-surface px-4 py-3.5 text-[13px]">
-          <CircleAlert className="mt-0.5 size-4 shrink-0 text-(--hue-amber)" />
+          <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
           <p className="text-muted-foreground">
             Ask whoever invited you to send a new invitation.
           </p>
@@ -118,7 +121,7 @@ function JoinForm() {
       >
         <div className="space-y-4">
           <div className="flex items-start gap-3 rounded-md border border-border bg-surface px-4 py-3.5 text-[13px]">
-            <CircleAlert className="mt-0.5 size-4 shrink-0 text-(--hue-amber)" />
+            <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
             <p className="text-muted-foreground">
               Set a password on your account first, then reopen this invitation
               link and use it to join.

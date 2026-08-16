@@ -19,12 +19,25 @@ export function BranchHint({
   hint?: string;
 }) {
   const [copied, setCopied] = useState<"branch" | "command" | null>(null);
+  const [copyFailed, setCopyFailed] = useState(false);
 
   const copy = (value: string, which: "branch" | "command") => {
-    navigator.clipboard.writeText(value).then(() => {
-      setCopied(which);
-      setTimeout(() => setCopied(null), 2000);
-    });
+    // The clipboard API is unavailable over plain HTTP and can be denied by
+    // permissions. Say so instead of leaving a dead button — the command is
+    // rendered as selectable text, so there is always a manual fallback.
+    if (!navigator.clipboard?.writeText) {
+      setCopyFailed(true);
+      return;
+    }
+
+    navigator.clipboard
+      .writeText(value)
+      .then(() => {
+        setCopyFailed(false);
+        setCopied(which);
+        setTimeout(() => setCopied(null), 2000);
+      })
+      .catch(() => setCopyFailed(true));
   };
 
   const command = checkoutCommand(branch);
@@ -53,7 +66,7 @@ export function BranchHint({
         >
           {copied === "command" ? (
             <>
-              <Check className="size-3.5 text-(--hue-green)" /> Copied
+              <Check className="size-3.5 text-success" /> Copied
             </>
           ) : (
             <>
@@ -70,6 +83,12 @@ export function BranchHint({
       >
         {copied === "branch" ? "Branch name copied" : `or copy just the branch name`}
       </button>
+
+      {copyFailed && (
+        <p className="mt-2 text-[11px] text-destructive">
+          Couldn&apos;t reach the clipboard — select the command above and copy it manually.
+        </p>
+      )}
     </div>
   );
 }

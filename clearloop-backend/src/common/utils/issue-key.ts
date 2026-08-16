@@ -21,14 +21,29 @@ export function deriveProjectKey(name: string): string {
     .split(/\s+/)
     .filter(Boolean);
 
-  if (words.length === 0) return 'PRJ';
+  // The key must start with a letter: issue keys are parsed out of branch
+  // names, and a numeric-leading key ("2026 Roadmap" -> 202-1) is
+  // indistinguishable from the rest of the branch, so it would never link.
+  const firstAlpha = words.find((word) => /^[A-Z]/.test(word));
+  if (!firstAlpha) return 'PRJ';
 
-  const first = words[0]!;
-  if (first.length >= 2) return first.slice(0, 3);
+  if (firstAlpha.length >= 2) return firstAlpha.slice(0, 3);
 
-  // Single-letter first word ("A Portal") — borrow the next word to stay readable.
-  const joined = words.join('');
+  // Single-letter word ("A Portal") — borrow what follows to stay readable.
+  const joined = words.slice(words.indexOf(firstAlpha)).join('');
   return joined.length >= 2 ? joined.slice(0, 3) : 'PRJ';
+}
+
+/** First unused key in the `BASE`, `BASE2`, `BASE3`… sequence. */
+export function nextFreeKey(base: string, used: Set<string | null>): string {
+  if (!used.has(base)) return base;
+
+  for (let suffix = 2; suffix < 1000; suffix += 1) {
+    const candidate = `${base}${suffix}`;
+    if (!used.has(candidate)) return candidate;
+  }
+
+  return `${base}${Date.now().toString().slice(-5)}`;
 }
 
 /** Lowercase, hyphenated, trimmed to something that reads well in a branch. */

@@ -8,7 +8,7 @@ import type {
   CreateFeatureDto,
   UpdateFeatureDto,
 } from './dto/create-feature.dto';
-import { deriveProjectKey } from '../common/utils/issue-key';
+import { deriveProjectKey, nextFreeKey } from '../common/utils/issue-key';
 
 /**
  * Derives the lifecycle timestamps from a status transition. Without this the
@@ -72,7 +72,25 @@ export class FeaturesService {
 
       // nextIssueNumber now points at the *next* one, so ours is one behind.
       const number = counter.nextIssueNumber - 1;
-      const projectKey = counter.key ?? deriveProjectKey(project.name);
+
+      // Projects created before issue keys existed have no key. Allocate one
+      // and persist it, rather than deriving a throwaway per feature: two
+      // legacy projects whose names both derive to WEB would otherwise each
+      // mint WEB-1, and the branch matcher would link PRs to the wrong one.
+      let projectKey = counter.key;
+      if (!projectKey) {
+        const base = deriveProjectKey(project.name);
+        const taken = await tx.project.findMany({
+          where: { tenantId, key: { startsWith: base } },
+          select: { key: true },
+        });
+        projectKey = nextFreeKey(base, new Set(taken.map((row) => row.key)));
+
+        await tx.project.update({
+          where: { id: project.id },
+          data: { key: projectKey },
+        });
+      }
 
       return tx.feature.create({
         data: {
