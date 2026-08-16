@@ -33,6 +33,11 @@ const AUTH_ENDPOINTS = [
   '/auth/select-workspace',
   '/auth/forgot-password',
   '/auth/reset-password',
+  // Accepting an invitation with the wrong existing password answers 401.
+  // That is a form error, not an expired session — redirecting would throw
+  // the invitee off the page holding their token.
+  '/invitations/validate',
+  '/invitations/accept',
 ];
 
 // Handle 401 errors (token expired/invalid)

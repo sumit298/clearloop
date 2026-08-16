@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateProjectDto } from './dto/create-project.dto';
 import type { UpdateProjectDto } from './dto/update-project.dto';
+import { deriveProjectKey } from '../common/utils/issue-key';
 
 @Injectable()
 export class ProjectsService {
@@ -17,8 +18,36 @@ export class ProjectsService {
         tenantId,
         name: dto.name,
         description: dto.description,
+        key: await this.allocateProjectKey(tenantId, dto.name),
       },
     });
+  }
+
+  /**
+   * Issue keys (WEB-12) have to be unambiguous inside a workspace, so a second
+   * project whose name derives to an existing key gets a numeric suffix
+   * (WEB, WEB2, WEB3...) rather than silently sharing one.
+   */
+  private async allocateProjectKey(
+    tenantId: string,
+    name: string,
+  ): Promise<string> {
+    const base = deriveProjectKey(name);
+
+    const taken = await this.prisma.project.findMany({
+      where: { tenantId, key: { startsWith: base } },
+      select: { key: true },
+    });
+    const used = new Set(taken.map((project) => project.key));
+
+    if (!used.has(base)) return base;
+
+    for (let suffix = 2; suffix < 100; suffix += 1) {
+      const candidate = `${base}${suffix}`;
+      if (!used.has(candidate)) return candidate;
+    }
+
+    return `${base}${Date.now().toString().slice(-4)}`;
   }
 
   async findAll(tenantId: string) {

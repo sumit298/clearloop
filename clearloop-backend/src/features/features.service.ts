@@ -8,6 +8,7 @@ import type {
   CreateFeatureDto,
   UpdateFeatureDto,
 } from './dto/create-feature.dto';
+import { deriveProjectKey } from '../common/utils/issue-key';
 
 /**
  * Derives the lifecycle timestamps from a status transition. Without this the
@@ -60,19 +61,35 @@ export class FeaturesService {
       if (!assignee) throw new NotFoundException('Assignee not found');
     }
 
-    const feature = await this.prisma.feature.create({
-      data: {
-        ...dto,
-        tenantId,
-        createdById: memberId,
-        status: 'PLANNED',
-        priority: dto.priority || 'MEDIUM',
-      },
-      include: {
-        createdBy: { select: { id: true, name: true, email: true } },
-        assignedTo: { select: { id: true, name: true, email: true } },
-        project: { select: { id: true, name: true } },
-      },
+    // Allocate the issue number inside a transaction: the increment and the
+    // read have to be atomic or two concurrent creates both get WEB-12.
+    const feature = await this.prisma.$transaction(async (tx) => {
+      const counter = await tx.project.update({
+        where: { id: project.id },
+        data: { nextIssueNumber: { increment: 1 } },
+        select: { key: true, nextIssueNumber: true },
+      });
+
+      // nextIssueNumber now points at the *next* one, so ours is one behind.
+      const number = counter.nextIssueNumber - 1;
+      const projectKey = counter.key ?? deriveProjectKey(project.name);
+
+      return tx.feature.create({
+        data: {
+          ...dto,
+          tenantId,
+          createdById: memberId,
+          status: 'PLANNED',
+          priority: dto.priority || 'MEDIUM',
+          number,
+          key: `${projectKey}-${number}`,
+        },
+        include: {
+          createdBy: { select: { id: true, name: true, email: true } },
+          assignedTo: { select: { id: true, name: true, email: true } },
+          project: { select: { id: true, name: true } },
+        },
+      });
     });
     await this.prisma.activityLog.create({
       data: {

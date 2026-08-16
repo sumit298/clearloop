@@ -886,6 +886,43 @@ export class GithubService {
       }
     }
 
+    // Human-friendly keys: feature/web-12-add-sso-login. The trailing slug is
+    // free text for the developer's benefit and is ignored when matching, so
+    // renaming it never breaks the link.
+    const keyMatch = branchName.match(
+      /(?:feature|feat|bug|fix)[\\/\-]([a-z][a-z0-9]{1,9}-\d+)(?:[-_/]|$)/i,
+    );
+    if (keyMatch && keyMatch[1]) {
+      const key = keyMatch[1].toUpperCase();
+
+      const feature = await this.prisma.feature.findFirst({
+        where: { key, tenantId },
+        select: { id: true },
+      });
+      if (feature) {
+        this.logger.log(
+          `Detected feature branch by key ${key}: ${feature.id}`,
+          'GithubService',
+        );
+        return feature.id;
+      }
+
+      // The same key space covers bugs; link through to the parent feature.
+      const bug = await this.prisma.bugReport.findFirst({
+        where: { key, tenantId },
+        select: { featureId: true },
+      });
+      if (bug?.featureId) {
+        this.logger.log(
+          `Bug key ${key} linked to feature ${bug.featureId}`,
+          'GithubService',
+        );
+        return bug.featureId;
+      }
+
+      this.logger.warn(`No feature or bug found for key ${key}`, 'GithubService');
+    }
+
     if (prBody) {
       const bugBodyMatch = prBody.match(/bug:\s*#?([a-f0-9-]{36})/i);
       if (bugBodyMatch) {
