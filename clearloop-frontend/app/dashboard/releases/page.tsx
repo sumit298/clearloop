@@ -8,6 +8,8 @@ import { Toolbar, SearchField, ResultCount } from "@/components/clearloop/toolba
 import { Chip, StatusChip } from "@/components/clearloop/status";
 import { useReleases, useCreateRelease, useGenerateReleaseNotes } from "@/lib/hooks/useReleases";
 import { useFeatures } from "@/lib/hooks/useFeatures";
+import { getErrorMessage } from "@/lib/api/errors";
+import { Markdown } from "@/components/clearloop/markdown";
 
 export default function ReleasesPage() {
   const { data: releases, isLoading } = useReleases();
@@ -28,9 +30,13 @@ export default function ReleasesPage() {
 
   const handleGenerateNotes = async () => {
     if (!form.featureIds.length) return;
-    try { const result = await generateNotes.mutateAsync({}); setForm((prev) => ({ ...prev, description: result.notes })); }
+    try { const result = await generateNotes.mutateAsync({ featureIds: form.featureIds, title: form.title }); setForm((prev) => ({ ...prev, description: result.notes })); }
     catch { /* mutation state retains error */ }
   };
+
+  const versionTaken =
+    createRelease.isError &&
+    /already exists/i.test(getErrorMessage(createRelease.error, ""));
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,7 +103,7 @@ export default function ReleasesPage() {
                   {r.releasedAt && <span className="font-mono text-[12px] text-muted-foreground">{new Date(r.releasedAt).toLocaleDateString()}</span>}
                   <span className="ml-auto font-mono text-[12px] text-muted-foreground">{r.features?.length ?? 0} features</span>
                 </div>
-                {r.description && <p className="px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">{r.description}</p>}
+                {r.description && <Markdown className="px-4 py-3 text-[13px] text-muted-foreground">{r.description}</Markdown>}
                 {(r.features?.length ?? 0) > 0 && (
                   <div className="border-t border-border">
                     {r.features!.map((item) => (
@@ -127,13 +133,13 @@ export default function ReleasesPage() {
               )}
               {createRelease.isError && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
-                  Failed to publish release. Please try again.
+                  {getErrorMessage(createRelease.error, "Failed to publish release. Please try again.")}
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[12px] font-medium">Version *</label>
-                  <input value={form.version} onChange={(e) => setForm({ ...form, version: e.target.value })} required placeholder="e.g. v1.2.0" className="mt-1.5 h-9 w-full rounded-md border border-border bg-surface px-3 text-[13px] outline-none focus:border-primary" />
+                  <input value={form.version} onChange={(e) => setForm({ ...form, version: e.target.value })} required placeholder="e.g. v1.2.0" className={`mt-1.5 h-9 w-full rounded-md border bg-surface px-3 text-[13px] outline-none focus:border-primary ${versionTaken ? "border-destructive" : "border-border"}`} />
                 </div>
                 <div>
                   <label className="text-[12px] font-medium">Release date *</label>

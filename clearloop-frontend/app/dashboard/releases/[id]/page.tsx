@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CircleDot, Copy, Tag } from "lucide-react";
 import { useState } from "react";
 import { PageHeader, Section } from "@/components/clearloop/primitives";
+import { Markdown } from "@/components/clearloop/markdown";
 import { DetailShell, RailGroup, RailRow, Stat } from "@/components/clearloop/detail";
 import { Chip, StatusChip, PriorityChip } from "@/components/clearloop/status";
 import { useRelease } from "@/lib/hooks/useReleases";
@@ -56,7 +57,7 @@ export default function ReleaseDetailPage() {
             {release.description && (
               <Section title="Release notes" icon={Tag}>
                 <div className="px-4 py-3.5">
-                  <pre className="whitespace-pre-wrap font-sans text-[13px] leading-relaxed text-muted-foreground">{release.description}</pre>
+                  <Markdown className="text-[13px] text-muted-foreground">{release.description}</Markdown>
                 </div>
               </Section>
             )}

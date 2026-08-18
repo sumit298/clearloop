@@ -42,6 +42,8 @@ export interface UpdateReleaseData {
 
 export interface GenerateReleaseNotesData {
   sinceDate?: string;
+  featureIds?: string[];
+  title?: string;
 }
 
 export const releasesApi = {

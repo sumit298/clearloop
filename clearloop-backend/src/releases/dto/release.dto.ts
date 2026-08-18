@@ -1,4 +1,12 @@
-import { IsNotEmpty, IsOptional, IsString, IsDateString, IsArray, IsUUID, IsBoolean } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsDateString,
+  IsArray,
+  IsUUID,
+  IsBoolean,
+} from 'class-validator';
 
 export class CreateReleaseDto {
   @IsString()
@@ -55,4 +63,13 @@ export class GenerateReleaseNotesDto {
   @IsDateString()
   @IsOptional()
   sinceDate?: string; // Generate notes for PRs merged since this date
+
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @IsOptional()
+  featureIds?: string[]; // Scope notes to PRs linked to these features
+
+  @IsString()
+  @IsOptional()
+  title?: string; // Release title, used as context for the summary
 }
