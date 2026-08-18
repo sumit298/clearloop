@@ -12,6 +12,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { PageHeader, Section } from "@/components/clearloop/primitives";
+import { Markdown } from "@/components/clearloop/markdown";
 import {
   DetailShell,
   RailGroup,
@@ -125,7 +126,7 @@ export default function PullRequestDetailPage() {
             {pr.aiSummary && (
               <Section title="AI summary" icon={Sparkles}>
                 <div className="px-4 py-3.5">
-                  <p className="text-[13px] leading-relaxed">{pr.aiSummary}</p>
+                  <Markdown className="text-[13px]">{pr.aiSummary}</Markdown>
                   {pr.aiRisk && (
                     <p className="mt-3 flex gap-2 text-[12.5px] leading-relaxed text-muted-foreground">
                       <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-warning" />

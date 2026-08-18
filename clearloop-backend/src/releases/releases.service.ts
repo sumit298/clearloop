@@ -2,7 +2,9 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AIService } from './ai.service';
 import {
@@ -20,14 +22,15 @@ export class ReleaseService {
 
   async create(tenantId: string, memberId: string, dto: CreateReleaseDto) {
     if (dto.featureIds && dto.featureIds.length > 0) {
+      const uniqueFeatureIds = Array.from(new Set(dto.featureIds));
       const features = await this.prisma.feature.findMany({
         where: {
-          id: { in: dto.featureIds },
+          id: { in: uniqueFeatureIds },
           tenantId,
         },
       });
 
-      if (features.length !== dto.featureIds.length) {
+      if (features.length !== uniqueFeatureIds.length) {
         throw new ForbiddenException('One or more features not found');
       }
     }
@@ -52,28 +55,60 @@ export class ReleaseService {
         description = synthesized || dto.description;
       }
     }
-    const release = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.release.create({
-        data: {
-          tenantId,
-          version: dto.version,
-          title: dto.title,
-          description: description || dto.description,
-          releasedAt: dto.releasedAt ? new Date(dto.releasedAt) : new Date(),
-        },
-      });
-      if (dto.featureIds && dto.featureIds.length) {
-        await tx.releaseFeature.createMany({
-          data: dto.featureIds.map((featureId) => ({
-            tenantId,
-            releaseId: created.id,
-            featureId,
-          })),
-        });
-      }
-      return created;
+    const duplicate = await this.prisma.release.findFirst({
+      where: { tenantId, version: dto.version },
+      select: { id: true },
     });
+
+    if (duplicate) {
+      throw new ConflictException(
+        `Version ${dto.version} already exists. Use a different version number.`,
+      );
+    }
+
+    const release = await this.runReleaseWrite(dto.version, () =>
+      this.prisma.$transaction(async (tx) => {
+        const created = await tx.release.create({
+          data: {
+            tenantId,
+            version: dto.version,
+            title: dto.title,
+            description: description || dto.description,
+            releasedAt: dto.releasedAt ? new Date(dto.releasedAt) : new Date(),
+          },
+        });
+        if (dto.featureIds && dto.featureIds.length) {
+          await tx.releaseFeature.createMany({
+            data: dto.featureIds.map((featureId) => ({
+              tenantId,
+              releaseId: created.id,
+              featureId,
+            })),
+          });
+        }
+        return created;
+      }),
+    );
     return this.findOne(tenantId, release.id);
+  }
+
+  private async runReleaseWrite<T>(
+    version: string | undefined,
+    write: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await write();
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          `Version ${version} already exists. Use a different version number.`,
+        );
+      }
+      throw error;
+    }
   }
 
   async findAll(tenantId: string) {
@@ -135,29 +170,44 @@ export class ReleaseService {
       throw new NotFoundException('Release not found');
     }
 
-    return this.prisma.release.update({
-      where: { id },
-      data: {
-        ...(dto.version && { version: dto.version }),
-        ...(dto.title && { title: dto.title }),
-        ...(dto.description && { description: dto.description }),
-        ...(dto.releasedAt && { releasedAt: new Date(dto.releasedAt) }),
-      },
-      include: {
-        features: {
-          include: {
-            feature: {
-              select: {
-                id: true,
-                title: true,
-                description: true,
-                status: true,
+    if (dto.version && dto.version !== release.version) {
+      const duplicate = await this.prisma.release.findFirst({
+        where: { tenantId, version: dto.version, id: { not: id } },
+        select: { id: true },
+      });
+
+      if (duplicate) {
+        throw new ConflictException(
+          `Version ${dto.version} already exists. Use a different version number.`,
+        );
+      }
+    }
+
+    return this.runReleaseWrite(dto.version, () =>
+      this.prisma.release.update({
+        where: { id },
+        data: {
+          ...(dto.version && { version: dto.version }),
+          ...(dto.title && { title: dto.title }),
+          ...(dto.description && { description: dto.description }),
+          ...(dto.releasedAt && { releasedAt: new Date(dto.releasedAt) }),
+        },
+        include: {
+          features: {
+            include: {
+              feature: {
+                select: {
+                  id: true,
+                  title: true,
+                  description: true,
+                  status: true,
+                },
               },
             },
           },
         },
-      },
-    });
+      }),
+    );
   }
 
   async remove(tenantId: string, id: string, userRole: string) {
@@ -240,23 +290,42 @@ export class ReleaseService {
 
   async generateReleaseNotes(tenantId: string, dto: GenerateReleaseNotesDto) {
     const sinceDate = dto.sinceDate ? new Date(dto.sinceDate) : new Date(0);
+    const featureIds = dto.featureIds?.length
+      ? Array.from(new Set(dto.featureIds))
+      : undefined;
+
+    if (featureIds) {
+      const features = await this.prisma.feature.findMany({
+        where: { id: { in: featureIds }, tenantId },
+        select: { id: true },
+      });
+
+      if (features.length !== featureIds.length) {
+        throw new ForbiddenException('One or more features not found');
+      }
+    }
 
     const prs = await this.prisma.pullRequest.findMany({
       where: {
         tenantId,
         status: 'MERGED',
         mergedAt: { gte: sinceDate },
+        ...(featureIds && { featureId: { in: featureIds } }),
       },
       orderBy: { mergedAt: 'desc' },
       select: { title: true, aiSummary: true },
     });
 
     if (prs.length === 0) {
-      return { notes: 'No merged PRs found for release notes generation' };
+      return {
+        notes: featureIds
+          ? 'No merged PRs are linked to the selected features'
+          : 'No merged PRs found for release notes generation',
+      };
     }
 
     const synthesized = await this.aiService.generateReleaseSummary(
-      'this release',
+      dto.title?.trim() || 'this release',
       prs,
     );
 

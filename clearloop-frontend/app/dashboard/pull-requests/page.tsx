@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ExternalLink, GitPullRequest, Link2, Sparkles } from "lucide-react";
 import { PageHeader, EmptyState } from "@/components/clearloop/primitives";
+import { Markdown } from "@/components/clearloop/markdown";
 import { Toolbar, SearchField, FilterMenu, ResultCount } from "@/components/clearloop/toolbar";
 import { PrStatusChip, toneColor } from "@/components/clearloop/status";
 import { useFeatures } from "@/lib/hooks/useFeatures";
@@ -100,10 +101,10 @@ export default function PullRequestsPage() {
 
                 <div className="border-t border-border bg-surface-raised px-4 py-2.5">
                   {pr.aiSummary && (
-                    <p className="text-[12px] leading-relaxed text-muted-foreground">
-                      <Sparkles className="mr-1.5 -mt-0.5 inline size-3 text-primary" />
-                      {pr.aiSummary}
-                    </p>
+                    <div className="flex gap-1.5">
+                      <Sparkles className="mt-1 size-3 shrink-0 text-primary" />
+                      <Markdown className="min-w-0 flex-1 text-[12px] text-muted-foreground">{pr.aiSummary}</Markdown>
+                    </div>
                   )}
                   <div className="mt-2 flex flex-wrap items-center gap-3">
                     <span className="font-mono text-[12px] text-muted-foreground">by {pr.author}</span>
