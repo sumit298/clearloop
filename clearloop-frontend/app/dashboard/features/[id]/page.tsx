@@ -12,6 +12,8 @@ import {
   StatusSelect,
   nextFeatureStatus,
 } from "@/components/clearloop/status-select";
+import { BranchHint } from "@/components/clearloop/branch-hint";
+import { featureBranchName } from "@/lib/git/branch";
 import { useFeature, useUpdateFeature } from "@/lib/hooks/useFeatures";
 import { getErrorMessage } from "@/lib/api/errors";
 import { useState } from "react";
@@ -57,6 +59,11 @@ export default function FeatureDetailPage() {
         description={feature.reason}
         meta={
           <>
+            {feature.key && (
+              <span className="rounded border border-border bg-surface-raised px-1.5 py-0.5 font-mono text-[12px] text-muted-foreground">
+                {feature.key}
+              </span>
+            )}
             {feature.project && (
               <Link href={`/dashboard/projects/${feature.project.id}`} className="rounded border border-border px-1.5 py-0.5 font-mono text-[12px] hover:text-foreground">
                 {feature.project.name}
@@ -95,7 +102,11 @@ export default function FeatureDetailPage() {
 
             <Section title={`Pull requests · ${feature.pullRequests?.length ?? 0}`} icon={GitPullRequest}>
               {!feature.pullRequests?.length ? (
-                <EmptyState icon={GitPullRequest} title="No pull requests linked yet" description={`Push a branch named feature/${feature.id} and ClearLoop will link it automatically.`} />
+                <BranchHint
+                  branch={featureBranchName(feature)}
+                  title="No pull requests linked yet"
+                  hint="Create your branch with this name and ClearLoop links the pull request the moment you open it."
+                />
               ) : (
                 feature.pullRequests.map((pr) => (
                   <div key={pr.id} className="border-b border-border last:border-b-0">

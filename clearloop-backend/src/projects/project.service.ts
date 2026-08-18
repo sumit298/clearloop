@@ -2,6 +2,8 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateProjectDto } from './dto/create-project.dto';
 import type { UpdateProjectDto } from './dto/update-project.dto';
+import { Prisma } from '@prisma/client';
+import { deriveProjectKey, nextFreeKey } from '../common/utils/issue-key';
 
 @Injectable()
 export class ProjectsService {
@@ -12,13 +14,50 @@ export class ProjectsService {
     // not stored directly on Project. Revisit once the GitHub module is rebuilt.
 
   async create(tenantId: string, dto: CreateProjectDto) {
-    return this.prisma.project.create({
-      data: {
-        tenantId,
-        name: dto.name,
-        description: dto.description,
-      },
+    // Allocation reads the taken keys and then writes, so two concurrent
+    // creates can pick the same one. @@unique([tenantId, key]) turns that race
+    // into a P2002 rather than a duplicate — retry so the loser gets the next
+    // key instead of an error.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        return await this.prisma.project.create({
+          data: {
+            tenantId,
+            name: dto.name,
+            description: dto.description,
+            key: await this.allocateProjectKey(tenantId, dto.name),
+          },
+        });
+      } catch (error) {
+        const isKeyConflict =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002' &&
+          String(error.meta?.target ?? '').includes('key');
+
+        if (!isKeyConflict || attempt === 4) throw error;
+      }
+    }
+
+    throw new ConflictException('Could not allocate a project key');
+  }
+
+  /**
+   * Issue keys (WEB-12) have to be unambiguous inside a workspace, so a second
+   * project whose name derives to an existing key gets a numeric suffix
+   * (WEB, WEB2, WEB3...) rather than silently sharing one.
+   */
+  private async allocateProjectKey(
+    tenantId: string,
+    name: string,
+  ): Promise<string> {
+    const base = deriveProjectKey(name);
+
+    const taken = await this.prisma.project.findMany({
+      where: { tenantId, key: { startsWith: base } },
+      select: { key: true },
     });
+
+    return nextFreeKey(base, new Set(taken.map((project) => project.key)));
   }
 
   async findAll(tenantId: string) {

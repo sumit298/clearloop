@@ -5,6 +5,9 @@ export interface Feature {
   title: string;
   description?: string;
   reason?: string;
+  /** Human-friendly issue key, e.g. "WEB-12". Null on features created before keys existed. */
+  key?: string | null;
+  number?: number | null;
   status: 'PLANNED' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE' | 'CANCELLED';
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   projectId: string;

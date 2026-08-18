@@ -583,7 +583,10 @@ model Feature {
   // Human-friendly issue number/key.
   // Example: number=12, key="WEB-12".
   number Int?
-  key    String? @unique
+  // Scoped per tenant, not globally: WEB-1 must be creatable in every
+  // workspace that has a "Web" project. A global unique here meant the second
+  // workspace to reach WEB-1 failed to create the record at all.
+  key    String?
 
   createdById  String
   assignedToId String?
@@ -615,6 +618,7 @@ model Feature {
 
   // Issue number unique per project.
   @@unique([projectId, number])
+  @@unique([tenantId, key])
 
   // Useful for composite tenant-scoped relations later.
   @@unique([tenantId, id])
@@ -651,7 +655,10 @@ model BugReport {
   // Human-friendly bug number/key.
   // Example: number=34, key="WEB-34".
   number Int?
-  key    String? @unique
+  // Scoped per tenant, not globally: WEB-1 must be creatable in every
+  // workspace that has a "Web" project. A global unique here meant the second
+  // workspace to reach WEB-1 failed to create the record at all.
+  key    String?
 
   reportedById String
   assignedToId String?
@@ -691,6 +698,7 @@ model BugReport {
 
   // Bug number unique per project.
   @@unique([projectId, number])
+  @@unique([tenantId, key])
 
   // Useful for composite tenant-scoped relations later.
   @@unique([tenantId, id])
