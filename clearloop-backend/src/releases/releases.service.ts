@@ -4,7 +4,7 @@ import {
   ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
-import { Prisma } from '../generated/prisma';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AIService } from './ai.service';
 import {
@@ -22,14 +22,15 @@ export class ReleaseService {
 
   async create(tenantId: string, memberId: string, dto: CreateReleaseDto) {
     if (dto.featureIds && dto.featureIds.length > 0) {
+      const uniqueFeatureIds = Array.from(new Set(dto.featureIds));
       const features = await this.prisma.feature.findMany({
         where: {
-          id: { in: dto.featureIds },
+          id: { in: uniqueFeatureIds },
           tenantId,
         },
       });
 
-      if (features.length !== dto.featureIds.length) {
+      if (features.length !== uniqueFeatureIds.length) {
         throw new ForbiddenException('One or more features not found');
       }
     }
@@ -289,7 +290,9 @@ export class ReleaseService {
 
   async generateReleaseNotes(tenantId: string, dto: GenerateReleaseNotesDto) {
     const sinceDate = dto.sinceDate ? new Date(dto.sinceDate) : new Date(0);
-    const featureIds = dto.featureIds?.length ? dto.featureIds : undefined;
+    const featureIds = dto.featureIds?.length
+      ? Array.from(new Set(dto.featureIds))
+      : undefined;
 
     if (featureIds) {
       const features = await this.prisma.feature.findMany({

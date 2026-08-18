@@ -11,12 +11,12 @@ export function Markdown({ children, className = "" }: { children: string; class
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          h1: ({ children }) => <p className="mt-4 text-[14px] font-semibold text-foreground first:mt-0">{children}</p>,
-          h2: ({ children }) => <p className="mt-4 text-[14px] font-semibold text-foreground first:mt-0">{children}</p>,
-          h3: ({ children }) => <p className="mt-4 text-[13px] font-semibold text-foreground first:mt-0">{children}</p>,
-          h4: ({ children }) => <p className="mt-3.5 text-[12px] font-medium uppercase tracking-wider text-muted-foreground first:mt-0">{children}</p>,
-          h5: ({ children }) => <p className="mt-3.5 text-[12px] font-medium uppercase tracking-wider text-muted-foreground first:mt-0">{children}</p>,
-          h6: ({ children }) => <p className="mt-3.5 text-[12px] font-medium uppercase tracking-wider text-muted-foreground first:mt-0">{children}</p>,
+          h1: ({ children }) => <h1 className="mt-4 text-[14px] font-semibold text-foreground first:mt-0">{children}</h1>,
+          h2: ({ children }) => <h2 className="mt-4 text-[14px] font-semibold text-foreground first:mt-0">{children}</h2>,
+          h3: ({ children }) => <h3 className="mt-4 text-[13px] font-semibold text-foreground first:mt-0">{children}</h3>,
+          h4: ({ children }) => <h4 className="mt-3.5 text-[12px] font-medium uppercase tracking-wider text-muted-foreground first:mt-0">{children}</h4>,
+          h5: ({ children }) => <h5 className="mt-3.5 text-[12px] font-medium uppercase tracking-wider text-muted-foreground first:mt-0">{children}</h5>,
+          h6: ({ children }) => <h6 className="mt-3.5 text-[12px] font-medium uppercase tracking-wider text-muted-foreground first:mt-0">{children}</h6>,
           p: ({ children }) => <p className="mt-2 first:mt-0">{children}</p>,
           ul: ({ children }) => <ul className="mt-2 space-y-1 first:mt-0">{children}</ul>,
           ol: ({ children }) => <ol className="mt-2 list-decimal space-y-1 pl-5 first:mt-0">{children}</ol>,
