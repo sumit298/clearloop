@@ -5,7 +5,6 @@ import {
   CircleDot,
   Command,
   FolderGit2,
-  GitBranch,
   GitMerge,
   GitPullRequest,
   Keyboard,
@@ -15,6 +14,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Logo } from "@/components/landing/Logo";
+import { GithubIcon } from "@/components/icons/GithubIcon";
 
 const steps = [
   {
@@ -102,7 +102,7 @@ export default function Home() {
               href="/signup"
               className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground"
             >
-              <GitBranch className="size-3.5" /> Continue with GitHub
+              <GithubIcon className="size-3.5" /> Continue with GitHub
             </Link>
           </div>
         </div>
@@ -133,7 +133,7 @@ export default function Home() {
               href="/signup"
               className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-[13px] font-medium text-primary-foreground"
             >
-              <GitBranch className="size-4" />
+              <GithubIcon />
               Continue with GitHub
             </Link>
             <Link
@@ -221,7 +221,7 @@ export default function Home() {
             href="/signup"
             className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-[13px] font-medium text-primary-foreground"
           >
-            <GitBranch className="size-4" />
+            <GithubIcon />
             Continue with GitHub
           </Link>
         </div>
@@ -243,6 +243,16 @@ export default function Home() {
         </a>
         <span className="ml-auto font-mono">© 2026 ClearLoop, Inc.</span>
       </footer>
+      <div aria-hidden className="select-none overflow-hidden px-6 pb-2">
+        <div className="mx-auto max-w-6xl">
+          <span
+            className="block bg-linear-to-b from-foreground/20 to-foreground/0 bg-clip-text text-center font-semibold leading-[0.85] tracking-[-0.04em] text-transparent"
+            style={{ fontSize: "clamp(3.5rem, 16vw, 15rem)" }}
+          >
+            clearloop
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
