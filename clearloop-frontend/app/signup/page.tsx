@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, GitBranch } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, Mail } from "lucide-react";
 import { Logo } from "@/components/landing/Logo";
+import { GithubIcon } from "@/components/icons/GithubIcon";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { FormError } from "@/components/auth/FormError";
 import { authApi } from "@/lib/api/auth";
@@ -63,7 +64,7 @@ export default function SignUp() {
         </Link>
         <div className="flex flex-1 items-center">
           <div className="w-full max-w-90">
-            <Logo className="[&>span+span]:hidden" />
+            {/* <Logo className="[&>span+span]:hidden" /> */}
             <h1 className="mt-6 text-[24px] font-semibold leading-tight">Create your workspace</h1>
             <p className="mt-2 text-[13px] text-muted-foreground">
               Connect a repo, invite your team, and the loop starts filling itself in.
@@ -75,7 +76,7 @@ export default function SignUp() {
                 onClick={() => { window.location.href = `${API_BASE()}/auth/github`; }}
                 className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary text-[13px] font-medium text-primary-foreground"
               >
-                <GitBranch className="size-4" />
+                <GithubIcon />
                 Sign up with GitHub
               </button>
 
@@ -127,9 +128,17 @@ export default function SignUp() {
 
               <button
                 disabled={loading}
-                className="mt-1 h-10 w-full rounded-md border border-border bg-surface text-[13px] font-medium hover:bg-surface-raised disabled:opacity-50"
+                className="group mt-1 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-border-strong bg-surface-raised text-[13px] font-medium shadow-sm transition-colors hover:border-primary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
               >
+                {loading ? (
+                  <Loader2 className="size-4 animate-spin text-primary" />
+                ) : (
+                  <Mail className="size-4 text-primary" />
+                )}
                 {loading ? "Creating workspace…" : "Continue with email"}
+                {!loading && (
+                  <ArrowRight className="size-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                )}
               </button>
             </form>
 

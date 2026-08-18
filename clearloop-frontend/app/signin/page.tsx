@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { GitBranch, Mail } from "lucide-react";
+import { ArrowRight, Loader2, Mail } from "lucide-react";
+import { GithubIcon } from "@/components/icons/GithubIcon";
 import { AuthFrame } from "@/components/auth/AuthFrame";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { FormError } from "@/components/auth/FormError";
@@ -125,7 +126,7 @@ export default function SignIn() {
             onClick={() => { window.location.href = `${API_BASE()}/auth/github`; }}
             className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary text-[13px] font-medium text-primary-foreground"
           >
-            <GitBranch className="size-4" />
+            <GithubIcon />
             Sign in with GitHub
           </button>
 
@@ -173,10 +174,17 @@ export default function SignIn() {
           <button
             type="submit"
             disabled={loading}
-            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-border bg-surface text-[13px] font-medium hover:bg-surface-raised disabled:opacity-50"
+            className="group inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-border-strong bg-surface-raised text-[13px] font-medium shadow-sm transition-colors hover:border-primary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <Mail className="size-4" />
+            {loading ? (
+              <Loader2 className="size-4 animate-spin text-primary" />
+            ) : (
+              <Mail className="size-4 text-primary" />
+            )}
             {loading ? "Signing in…" : "Continue with email"}
+            {!loading && (
+              <ArrowRight className="size-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            )}
           </button>
         </form>
       )}

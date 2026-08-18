@@ -52,6 +52,20 @@ export function Footer() {
           </span>
         </div>
       </div>
+
+      <div
+        aria-hidden
+        className="relative select-none overflow-hidden px-6 pb-2"
+      >
+        <div className="mx-auto max-w-[1200px]">
+          <span
+            className="block bg-linear-to-b from-foreground/20 to-foreground/0 bg-clip-text text-center font-semibold leading-[0.85] tracking-[-0.04em] text-transparent"
+            style={{ fontSize: "clamp(3.5rem, 15.5vw, 15rem)" }}
+          >
+            clearloop
+          </span>
+        </div>
+      </div>
     </footer>
   );
 }
