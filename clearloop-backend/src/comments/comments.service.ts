@@ -5,10 +5,14 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCommentsDto, UpdateCommentsDto } from './dto/comments.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class CommentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   async create(tenantId: string, memberId: string, dto: CreateCommentsDto) {
     // Must have either featureId or bugReportId
@@ -22,6 +26,7 @@ export class CommentsService {
     if (dto.featureId) {
       const feature = await this.prisma.feature.findFirst({
         where: { id: dto.featureId, tenantId },
+        select: { assignedToId: true, title: true },
       });
       if (!feature) {
         throw new NotFoundException('Feature not found');
@@ -32,13 +37,14 @@ export class CommentsService {
     if (dto.bugReportId) {
       const bugReport = await this.prisma.bugReport.findFirst({
         where: { id: dto.bugReportId, tenantId },
+        select: { reportedById: true, title: true, featureId: true },
       });
       if (!bugReport) {
         throw new NotFoundException('Bug report not found');
       }
     }
 
-    return this.prisma.comment.create({
+    const comment = await this.prisma.comment.create({
       data: {
         tenantId,
         memberId,
@@ -56,6 +62,43 @@ export class CommentsService {
         },
       },
     });
+
+    if (dto.featureId) {
+      const feature = await this.prisma.feature.findFirst({
+        where: { id: dto.featureId, tenantId },
+        select: { assignedToId: true, title: true },
+      });
+      if (feature?.assignedToId && feature.assignedToId !== memberId) {
+        void this.notifications.create(tenantId, feature.assignedToId, {
+          eventType: 'COMMENT_ADDED',
+          title: 'New comment on your feature',
+          message: `Someone commented on "${feature.title}"`,
+          severity: 'INFO',
+          featureId: dto.featureId,
+          deduplicationKey: `COMMENT_ADDED-${comment.id}`,
+        }).catch(() => {});
+      }
+    }
+
+    if (dto.bugReportId) {
+      const bug = await this.prisma.bugReport.findFirst({
+        where: { id: dto.bugReportId, tenantId },
+        select: { reportedById: true, title: true, featureId: true },
+      });
+      if (bug?.reportedById && bug.reportedById !== memberId) {
+        void this.notifications.create(tenantId, bug.reportedById, {
+          eventType: 'COMMENT_ADDED',
+          title: 'New comment on your bug report',
+          message: `Someone commented on "${bug.title}"`,
+          severity: 'INFO',
+          bugReportId: dto.bugReportId,
+          featureId: bug.featureId ?? undefined,
+          deduplicationKey: `COMMENT_ADDED-${comment.id}`,
+        }).catch(() => {});
+      }
+    }
+
+    return comment;
   }
 
   async findByFeature(tenantId: string, featureId: string) {

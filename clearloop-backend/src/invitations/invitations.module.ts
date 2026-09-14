@@ -4,12 +4,14 @@ import { InvitationsService } from './invitations.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { EmailModule } from '../email/email.module';
 import { AuthModule } from '../auth/auth.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     PrismaModule,
     EmailModule,
     AuthModule,
+    NotificationsModule
   ],
   controllers: [InvitationsController],
   providers: [InvitationsService],

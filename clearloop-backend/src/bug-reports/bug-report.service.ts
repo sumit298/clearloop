@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBugReportDto, UpdateBugReportDto } from './dto/bug-report.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
  * Derives resolvedAt/closedAt from a status transition. These columns exist in
@@ -40,7 +41,10 @@ function bugLifecycleStamps(
 
 @Injectable()
 export class BugReportsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   // Resolves the effective projectId for a bug: when a feature is given, the
   // feature's project wins (a bug can't belong to a different project than
@@ -141,6 +145,25 @@ export class BugReportsService {
       }
       return created;
     });
+
+    // Notify feature assignee that a bug was reported on their feature
+    if (dto.featureId) {
+      const feature = await this.prisma.feature.findFirst({
+        where: { id: dto.featureId, tenantId },
+        select: { assignedToId: true, title: true },
+      });
+      if (feature?.assignedToId && feature.assignedToId !== memberId) {
+        void this.notifications.create(tenantId, feature.assignedToId, {
+          eventType: 'BUG_REPORTED',
+          title: 'New bug reported on your feature',
+          message: `"${dto.title}" was reported on "${feature.title}"`,
+          severity: 'WARNING',
+          featureId: dto.featureId,
+          bugReportId: bugReport.id,
+          deduplicationKey: `BUG_REPORTED-${bugReport.id}`,
+        }).catch(() => {});
+      }
+    }
 
     return bugReport;
   }
@@ -294,6 +317,25 @@ export class BugReportsService {
 
       return result;
     });
+
+    // Notify feature assignee when bug is resolved
+    if (dto.status === 'RESOLVED' && bugReport.featureId) {
+      const feature = await this.prisma.feature.findFirst({
+        where: { id: bugReport.featureId, tenantId },
+        select: { assignedToId: true, title: true },
+      });
+      if (feature?.assignedToId && feature.assignedToId !== memberId) {
+        void this.notifications.create(tenantId, feature.assignedToId, {
+          eventType: 'BUG_RESOLVED',
+          title: 'Bug resolved',
+          message: `"${bugReport.title}" has been resolved`,
+          severity: 'INFO',
+          featureId: bugReport.featureId,
+          bugReportId: bugReport.id,
+          deduplicationKey: `BUG_RESOLVED-${bugReport.id}`,
+        }).catch(() => {});
+      }
+    }
 
     return updated;
   }

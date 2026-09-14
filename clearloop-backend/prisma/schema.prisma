@@ -104,6 +104,12 @@ enum BugSeverity {
   CRITICAL
 }
 
+enum NotificationSeverity {
+  INFO
+  WARNING
+  ALERT
+}
+
 enum BugStatus {
   OPEN
   IN_PROGRESS
@@ -330,6 +336,7 @@ model Tenant {
   githubInstallStates GitHubInstallState[]
 
   webhookEvents WebhookEvent[]
+  notifications Notification[]
 
   @@map("tenants")
 }
@@ -418,6 +425,8 @@ model WorkspaceMember {
 
   githubInstallStates GitHubInstallState[]
 
+  notifications Notification[]
+
   // One membership per user per workspace.
   @@unique([userId, tenantId])
 
@@ -477,6 +486,40 @@ model Invitation {
   // CREATE UNIQUE INDEX "invitations_pending_email_unique"
   // ON "invitations" ("tenantId", "email")
   // WHERE "acceptedAt" IS NULL AND "revokedAt" IS NULL;
+}
+
+// =============================================================================
+// Notifications
+// =============================================================================
+model Notification {
+  id        String @id @default(uuid())  
+  tenantId  String
+  memberId  String // who receives it
+
+  eventType String  // e.g 
+  title     String
+  message   String
+  actorName  String? // optional, e.g. "John Doe"
+
+  severity  NotificationSeverity
+
+  featureId   String?
+  bugReportId String?
+  pullRequestId String?
+
+  deduplicationKey String? // optional, for deduplication of similar notifications
+
+  readAt      DateTime?
+  createdAt DateTime @default(now())
+  
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  member WorkspaceMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId, severity, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([memberId, readAt]) // fast unread count
+  @@unique([memberId, deduplicationKey])
+  @@map("notifications")
 }
 
 // =============================================================================
@@ -613,6 +656,7 @@ model Feature {
   comments     Comment[]
   activityLogs ActivityLog[]
   pullRequests PullRequest[]
+  
 
   releases ReleaseFeature[]
 
