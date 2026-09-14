@@ -26,6 +26,7 @@ export class CommentsService {
     if (dto.featureId) {
       const feature = await this.prisma.feature.findFirst({
         where: { id: dto.featureId, tenantId },
+        select: { assignedToId: true, title: true },
       });
       if (!feature) {
         throw new NotFoundException('Feature not found');
@@ -36,6 +37,7 @@ export class CommentsService {
     if (dto.bugReportId) {
       const bugReport = await this.prisma.bugReport.findFirst({
         where: { id: dto.bugReportId, tenantId },
+        select: { reportedById: true, title: true, featureId: true },
       });
       if (!bugReport) {
         throw new NotFoundException('Bug report not found');
@@ -73,7 +75,7 @@ export class CommentsService {
           message: `Someone commented on "${feature.title}"`,
           severity: 'INFO',
           featureId: dto.featureId,
-          deduplicationKey: `COMMENT_ADDED-${dto.featureId}-${Date.now()}`,
+          deduplicationKey: `COMMENT_ADDED-${comment.id}`,
         }).catch(() => {});
       }
     }
@@ -91,7 +93,7 @@ export class CommentsService {
           severity: 'INFO',
           bugReportId: dto.bugReportId,
           featureId: bug.featureId ?? undefined,
-          deduplicationKey: `COMMENT_ADDED-${dto.bugReportId}-${Date.now()}`,
+          deduplicationKey: `COMMENT_ADDED-${comment.id}`,
         }).catch(() => {});
       }
     }

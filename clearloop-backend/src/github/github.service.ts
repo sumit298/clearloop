@@ -2,7 +2,6 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-  ConflictException,
   Inject,
 } from '@nestjs/common';
 import type { LoggerService } from '@nestjs/common';
