@@ -45,7 +45,12 @@ export class NotificationsService {
       where: {
         memberId,
         severity: severity as 'INFO' | 'WARNING' | 'ALERT',
-        ...(cursorRow && { createdAt: { lt: cursorRow.createdAt } }),
+        ...(cursorRow && {
+          OR: [
+            { createdAt: { lt: cursorRow.createdAt } },
+            { createdAt: cursorRow.createdAt, id: { lt: cursorRow.id } },
+          ],
+        }),
       },
       orderBy: { createdAt: 'desc' },
       take: size + 1,

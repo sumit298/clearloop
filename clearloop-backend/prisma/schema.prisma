@@ -656,6 +656,7 @@ model Feature {
   comments     Comment[]
   activityLogs ActivityLog[]
   pullRequests PullRequest[]
+  
 
   releases ReleaseFeature[]
 

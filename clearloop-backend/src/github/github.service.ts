@@ -13,6 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as jwt from 'jsonwebtoken';
 import { AIService } from '../releases/ai.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class GithubService {
@@ -21,6 +22,7 @@ export class GithubService {
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
     private readonly aiService: AIService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ---------------------------------------------------------------------
@@ -644,9 +646,6 @@ export class GithubService {
       where: { id: repositoryId },
     });
     if (repository) {
-      // Fire-and-forget: the webhook response shouldn't wait on a diff fetch
-      // + Gemini call. generateAndSaveAiSummary already swallows its own
-      // errors, so nothing here can produce an unhandled rejection.
       void this.generateAndSaveAiSummary(
         result.pullRequestId,
         repository.installationId,
@@ -656,6 +655,26 @@ export class GithubService {
         pr.title,
         pr.body,
       );
+    }
+
+    // Notify feature assignee when a PR is opened and linked
+    if (featureId) {
+      const feature = await this.prisma.feature.findFirst({
+        where: { id: featureId, tenantId },
+        select: { assignedToId: true, title: true },
+      });
+      if (feature?.assignedToId) {
+        void this.notifications.create(tenantId, feature.assignedToId, {
+          eventType: 'PR_OPENED',
+          title: 'PR opened on your feature',
+          message: `"${pr.title}" was opened by ${pr.user?.login ?? 'someone'}`,
+          severity: 'INFO',
+          actorName: pr.user?.login ?? undefined,
+          featureId,
+          pullRequestId: result.pullRequestId,
+          deduplicationKey: `PR_OPENED-${result.pullRequestId}`,
+        }).catch(() => {});
+      }
     }
 
     return result;
@@ -744,6 +763,26 @@ export class GithubService {
           pr.title,
           pr.body,
         );
+      }
+    }
+
+    // Notify feature assignee when a PR is merged
+    if (pr.merged && pullRequest.featureId) {
+      const feature = await this.prisma.feature.findFirst({
+        where: { id: pullRequest.featureId, tenantId },
+        select: { assignedToId: true, title: true },
+      });
+      if (feature?.assignedToId) {
+        void this.notifications.create(tenantId, feature.assignedToId, {
+          eventType: 'PR_MERGED',
+          title: 'PR merged on your feature',
+          message: `"${pr.title}" was merged`,
+          severity: 'INFO',
+          actorName: pr.user?.login ?? undefined,
+          featureId: pullRequest.featureId,
+          pullRequestId: pullRequest.id,
+          deduplicationKey: `PR_MERGED-${pullRequest.id}`,
+        }).catch(() => {});
       }
     }
 
@@ -973,7 +1012,7 @@ export class GithubService {
     pullRequestId: string,
     featureId: string,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const pr = await tx.pullRequest.findFirst({
         where: { tenantId, id: pullRequestId },
       });
@@ -1001,8 +1040,21 @@ export class GithubService {
         },
       });
 
-      return { message: 'PR linked to feature successfully' };
+      return { message: 'PR linked to feature successfully', assignedToId: feature.assignedToId, featureTitle: feature.title };
     });
+
+    if (result.assignedToId && result.assignedToId !== memberId) {
+      void this.notifications.create(tenantId, result.assignedToId, {
+        eventType: 'PR_LINKED',
+        title: 'PR linked to your feature',
+        message: `A pull request was manually linked to "${result.featureTitle}"`,
+        severity: 'INFO',
+        featureId,
+        deduplicationKey: `PR_LINKED-${pullRequestId}`,
+      }).catch(() => {});
+    }
+
+    return { message: result.message };
   }
 
   async unlinkPRFromFeature(

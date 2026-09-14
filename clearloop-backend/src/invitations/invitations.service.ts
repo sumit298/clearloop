@@ -12,6 +12,7 @@ import * as bcrypt from 'bcrypt';
 import { UserRole } from '@prisma/client';
 import { EmailService } from '../email/email.service';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
+import { NotificationsService } from '../notifications/notifications.service';
 
 function hashToken(rawToken: string): string {
   return createHash('sha256').update(rawToken).digest('hex');
@@ -21,8 +22,9 @@ function hashToken(rawToken: string): string {
 export class InvitationsService {
   constructor(
     private prisma: PrismaService,
-    private emailService: EmailService, 
+    private emailService: EmailService,
     @Inject(WINSTON_MODULE_PROVIDER) private readonly logger: LoggerService,
+    private notifications: NotificationsService,
   ) {}
 
   async create(
@@ -173,7 +175,7 @@ export class InvitationsService {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       let user = await tx.user.findUnique({
         where: { email: invitation.email },
       });
@@ -226,6 +228,19 @@ export class InvitationsService {
 
       return { user, member, tenant: invitation.tenant };
     });
+
+    if (invitation.invitedByMemberId) {
+      void this.notifications.create(invitation.tenantId, invitation.invitedByMemberId, {
+        eventType: 'INVITATION_ACCEPTED',
+        title: 'Invitation accepted',
+        message: `${name} has joined the workspace`,
+        severity: 'INFO',
+        actorName: name,
+        deduplicationKey: `INVITATION_ACCEPTED-${invitation.id}`,
+      }).catch(() => {});
+    }
+
+    return result;
   }
 
   async list(tenantId: string) {
