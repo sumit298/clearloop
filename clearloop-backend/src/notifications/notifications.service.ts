@@ -17,10 +17,9 @@ import {
 } from 'rxjs';
 import type { CreateNotificationDTO } from './dto/notifications.dto';
 
-export interface SseEvent {
-  type: 'NOTIFICATION' | 'SUMMARY' | 'HEARTBEAT';
-  data: any;
-}
+export type SseEvent =
+  | { type: 'NOTIFICATION'; data: { id: string } }
+  | { type: 'SUMMARY' | 'HEARTBEAT'; data: unknown };
 
 @Injectable()
 export class NotificationsService {
@@ -77,7 +76,7 @@ export class NotificationsService {
 
     const cursorRow = cursor
       ? await this.prisma.notification.findFirst({
-          where: { id: cursor, memberId },
+          where: { id: cursor, memberId, ...severityFilter },
           select: { id: true, createdAt: true },
         })
       : null;
@@ -132,14 +131,28 @@ export class NotificationsService {
    * a different backend instance than the one that created the notification.
    * The in-memory stream remains the low-latency path for single-instance use.
    */
-  getPersistedStream(memberId: string): Observable<SseEvent> {
-    return defer(() =>
-      this.prisma.notification.findFirst({
+  getPersistedStream(
+    memberId: string,
+    lastEventId?: string,
+  ): Observable<SseEvent> {
+    return defer(async () => {
+      if (lastEventId) {
+        const resumeCursor = await this.prisma.notification.findFirst({
+          where: { id: lastEventId, memberId },
+          select: { id: true, createdAt: true },
+        });
+
+        if (resumeCursor) {
+          return resumeCursor;
+        }
+      }
+
+      return this.prisma.notification.findFirst({
         where: { memberId },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         select: { id: true, createdAt: true },
-      }),
-    ).pipe(
+      });
+    }).pipe(
       switchMap((latest) => {
         let cursor = latest;
 

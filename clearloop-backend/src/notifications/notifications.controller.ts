@@ -9,14 +9,7 @@ import {
   Req,
 } from '@nestjs/common';
 
-import {
-  Observable,
-  distinct,
-  finalize,
-  interval,
-  map,
-  merge,
-} from 'rxjs';
+import { Observable, distinct, finalize, interval, map, merge } from 'rxjs';
 import type { MessageEvent } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { QueryNotificationsDto, MarkReadDTO } from './dto/notifications.dto';
@@ -54,17 +47,24 @@ export class NotificationsController {
   @Sse('stream')
   stream(@Req() req: AuthenticatedRequest): Observable<MessageEvent> {
     const memberId = req.user.memberId;
+    const lastEventId = req.get('Last-Event-ID')?.trim() || undefined;
 
     const notifications$ = merge(
       this.notificationsService.getStream(memberId),
-      this.notificationsService.getPersistedStream(memberId),
+      this.notificationsService.getPersistedStream(memberId, lastEventId),
     ).pipe(
       // The persisted poll can observe the same event already delivered by
       // the local Subject. Suppress that duplicate per SSE connection.
       distinct((event) =>
         event.type === 'NOTIFICATION' ? event.data.id : event,
       ),
-      map((event) => ({ data: event }) as MessageEvent),
+      map(
+        (event) =>
+          ({
+            data: event,
+            ...(event.type === 'NOTIFICATION' && { id: event.data.id }),
+          }) as MessageEvent,
+      ),
     );
 
     const heartbeat$ = interval(30000).pipe(
