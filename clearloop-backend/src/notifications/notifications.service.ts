@@ -1,6 +1,20 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Subject } from 'rxjs';
+import {
+  Observable,
+  Subject,
+  catchError,
+  defer,
+  EMPTY,
+  exhaustMap,
+  from,
+  interval,
+  map,
+  mergeMap,
+  of,
+  startWith,
+  switchMap,
+} from 'rxjs';
 import type { CreateNotificationDTO } from './dto/notifications.dto';
 
 export interface SseEvent {
@@ -11,40 +25,71 @@ export interface SseEvent {
 @Injectable()
 export class NotificationsService {
   private streams = new Map<string, Subject<SseEvent>>();
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async create(tenantId: string, memberId: string, dto: CreateNotificationDTO) {
-    // upsert - if deduplication key exists, update the existing notification, else create a new one
-    const notification = await this.prisma.notification.upsert({
-      where: {
-        memberId_deduplicationKey: {
-          memberId,
-          deduplicationKey:
-            dto.deduplicationKey ??
-            `${dto.eventType}-${memberId}-${Date.now()}`,
+    try {
+      // Upsert so webhook retries do not create duplicate notifications.
+      const notification = await this.prisma.notification.upsert({
+        where: {
+          memberId_deduplicationKey: {
+            memberId,
+            deduplicationKey:
+              dto.deduplicationKey ??
+              `${dto.eventType}-${memberId}-${Date.now()}`,
+          },
         },
-      },
-      create: { tenantId, memberId, ...dto },
-      update: {},
-    });
+        create: { tenantId, memberId, ...dto },
+        update: {},
+      });
 
-    this.push(memberId, {
-      type: 'SUMMARY',
-      data: { [dto.severity]: 1 },
-    });
+      // Send the full persisted record so SSE consumers can update without a
+      // follow-up request. Keep SUMMARY for existing consumers.
+      this.push(memberId, { type: 'NOTIFICATION', data: notification });
+      this.push(memberId, {
+        type: 'SUMMARY',
+        data: { [notification.severity]: 1 },
+      });
 
-    return notification;
+      return notification;
+    } catch (error) {
+      this.logger.error(
+        JSON.stringify({
+          event: 'notification.create.failed',
+          tenantId,
+          memberId,
+          eventType: dto.eventType,
+          deduplicationKey: dto.deduplicationKey,
+        }),
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw error;
+    }
   }
 
-  async list(memberId: string, severity: string, cursor?: string, size = 16) {
+  async list(memberId: string, severity = 'ALL', cursor?: string, size = 16) {
+    const severityFilter =
+      severity === 'ALL'
+        ? {}
+        : { severity: severity as 'INFO' | 'WARNING' | 'ALERT' };
+
     const cursorRow = cursor
-      ? await this.prisma.notification.findUnique({ where: { id: cursor } })
+      ? await this.prisma.notification.findFirst({
+          where: { id: cursor, memberId },
+          select: { id: true, createdAt: true },
+        })
       : null;
+
+    if (cursor && !cursorRow) {
+      throw new BadRequestException('Invalid notification cursor');
+    }
 
     const items = await this.prisma.notification.findMany({
       where: {
         memberId,
-        severity: severity as 'INFO' | 'WARNING' | 'ALERT',
+        ...severityFilter,
         ...(cursorRow && {
           OR: [
             { createdAt: { lt: cursorRow.createdAt } },
@@ -52,7 +97,7 @@ export class NotificationsService {
           ],
         }),
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: size + 1,
     });
 
@@ -61,12 +106,12 @@ export class NotificationsService {
 
     const [totalCount, unreadCount] = await Promise.all([
       this.prisma.notification.count({
-        where: { memberId, severity: severity as 'INFO' | 'WARNING' | 'ALERT' },
+        where: { memberId, ...severityFilter },
       }),
       this.prisma.notification.count({
         where: {
           memberId,
-          severity: severity as 'INFO' | 'WARNING' | 'ALERT',
+          ...severityFilter,
           readAt: null,
         },
       }),
@@ -80,6 +125,78 @@ export class NotificationsService {
         nextCursor: hasMore ? data[data.length - 1]?.id : undefined,
       },
     };
+  }
+
+  /**
+   * Poll persisted notifications as a fallback for SSE connections handled by
+   * a different backend instance than the one that created the notification.
+   * The in-memory stream remains the low-latency path for single-instance use.
+   */
+  getPersistedStream(memberId: string): Observable<SseEvent> {
+    return defer(() =>
+      this.prisma.notification.findFirst({
+        where: { memberId },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        select: { id: true, createdAt: true },
+      }),
+    ).pipe(
+      switchMap((latest) => {
+        let cursor = latest;
+
+        return interval(5000).pipe(
+          startWith(0),
+          exhaustMap(() =>
+            from(
+              this.prisma.notification.findMany({
+                where: {
+                  memberId,
+                  ...(cursor && {
+                    OR: [
+                      { createdAt: { gt: cursor.createdAt } },
+                      { createdAt: cursor.createdAt, id: { gt: cursor.id } },
+                    ],
+                  }),
+                },
+                orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+                take: 100,
+              }),
+            ).pipe(
+              map((rows) => {
+                if (rows.length > 0) {
+                  cursor = rows[rows.length - 1] ?? cursor;
+                }
+                return rows;
+              }),
+              mergeMap((rows) => from(rows)),
+              map((notification) => ({
+                type: 'NOTIFICATION' as const,
+                data: notification,
+              })),
+              catchError((error: unknown) => {
+                this.logger.error(
+                  JSON.stringify({
+                    event: 'notification.stream.poll.failed',
+                    memberId,
+                  }),
+                  error instanceof Error ? error.stack : String(error),
+                );
+                return of<SseEvent>();
+              }),
+            ),
+          ),
+        );
+      }),
+      catchError((error: unknown) => {
+        this.logger.error(
+          JSON.stringify({
+            event: 'notification.stream.initialise.failed',
+            memberId,
+          }),
+          error instanceof Error ? error.stack : String(error),
+        );
+        return EMPTY;
+      }),
+    );
   }
 
   async markRead(memberId: string, uuids?: string[], markAllAsRead?: boolean) {

@@ -1,16 +1,19 @@
-import { IsBoolean, IsIn, IsOptional, IsUUID } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class QueryNotificationsDto {
-  @IsIn(['INFO', 'WARNING', 'ALERT'])
-  severity: 'INFO' | 'WARNING' | 'ALERT' = 'INFO';
+  @IsIn(['ALL', 'INFO', 'WARNING', 'ALERT'])
+  severity: 'ALL' | 'INFO' | 'WARNING' | 'ALERT' = 'ALL';
 
   @IsOptional()
   @IsUUID()
   cursor?: string;
 
   @IsOptional()
-  @Transform(({ value }) => parseInt(value))
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
   size?: number = 16;
 }
 

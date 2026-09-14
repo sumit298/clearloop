@@ -516,7 +516,7 @@ model Notification {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   member WorkspaceMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
-  @@index([memberId, severity, createdAt(sort: Desc)])
+  @@index([memberId, severity, createdAt(sort: Desc), id(sort: Desc)])
   @@index([memberId, readAt]) // fast unread count
   @@unique([memberId, deduplicationKey])
   @@map("notifications")
