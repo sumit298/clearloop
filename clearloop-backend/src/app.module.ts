@@ -15,11 +15,13 @@ import { WorkspaceModule } from './workspace/workspace.module';
 import { LoggerModule } from './logger/logger.module';
 import { ConfigModule } from '@nestjs/config';
 import { HealthController } from './health/health.controller';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env'  }),
     LoggerModule,
+    NotificationsModule,
     PrismaModule,
     AuthModule,
     FeaturesModule,
