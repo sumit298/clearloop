@@ -1,7 +1,6 @@
 import {
   Injectable,
   NotFoundException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
@@ -9,6 +8,7 @@ import type {
   UpdateFeatureDto,
 } from './dto/create-feature.dto';
 import { deriveProjectKey, nextFreeKey } from '../common/utils/issue-key';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
  * Derives the lifecycle timestamps from a status transition. Without this the
@@ -19,7 +19,11 @@ import { deriveProjectKey, nextFreeKey } from '../common/utils/issue-key';
  * feature does not leave it looking permanently delivered.
  */
 function lifecycleStamps(
-  existing: { status: string; startedAt: Date | null; completedAt: Date | null },
+  existing: {
+    status: string;
+    startedAt: Date | null;
+    completedAt: Date | null;
+  },
   nextStatus: string | undefined,
 ) {
   if (!nextStatus || nextStatus === existing.status) return {};
@@ -42,7 +46,10 @@ function lifecycleStamps(
 
 @Injectable()
 export class FeaturesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   async create(tenantId: string, memberId: string, dto: CreateFeatureDto) {
     const project = await this.prisma.project.findFirst({
@@ -118,6 +125,21 @@ export class FeaturesService {
         metadata: { title: feature.title },
       },
     });
+
+    if (feature.assignedTo && feature.assignedTo.id !== memberId) {
+      void this.notifications
+        .create(tenantId, feature.assignedTo.id, {
+          eventType: 'FEATURE_ASSIGNED',
+          title: 'Feature assigned to you',
+          message: `"${feature.title}" has been assigned to you`,
+          severity: 'INFO',
+          actorName: feature.createdBy.name ?? undefined,
+          featureId: feature.id,
+          deduplicationKey: `FEATURE_ASSIGNED-${feature.id}-${feature.assignedTo.id}`,
+        })
+        .catch(() => {});
+    }
+
     return feature;
   }
 
@@ -188,31 +210,37 @@ export class FeaturesService {
     if (!feature) throw new NotFoundException('Feature not found');
     return feature;
   }
-  async update(tenantId: string, memberId: string, id: string, dto: UpdateFeatureDto){
+  async update(
+    tenantId: string,
+    memberId: string,
+    id: string,
+    dto: UpdateFeatureDto,
+  ) {
     const existing = await this.prisma.feature.findFirst({
-      where: {id, tenantId},
-    })
-    if(!existing){
-      throw new NotFoundException("Feature not found");
-
+      where: { id, tenantId },
+    });
+    if (!existing) {
+      throw new NotFoundException('Feature not found');
     }
 
-    if(dto.assignedToId){
+    if (dto.assignedToId) {
       const assignee = await this.prisma.workspaceMember.findFirst({
-        where: { id: dto.assignedToId, tenantId}
-      })
+        where: { id: dto.assignedToId, tenantId },
+      });
 
-      if(!assignee){ throw new NotFoundException("Assignee not found")}
+      if (!assignee) {
+        throw new NotFoundException('Assignee not found');
+      }
     }
 
     const feature = await this.prisma.feature.update({
       where: { id },
       data: { ...dto, ...lifecycleStamps(existing, dto.status) },
       include: {
-        createdBy: { select: { id: true, name: true, email: true}},
-        assignedTo: { select: { id: true, name: true, email: true}},
-        project: { select: { id: true, name: true}}
-      }
+        createdBy: { select: { id: true, name: true, email: true } },
+        assignedTo: { select: { id: true, name: true, email: true } },
+        project: { select: { id: true, name: true } },
+      },
     });
 
     await this.prisma.activityLog.create({
@@ -221,19 +249,52 @@ export class FeaturesService {
         featureId: feature.id,
         memberId,
         action: 'FEATURE_UPDATED',
-        metadata: JSON.parse(JSON.stringify(dto))
-
+        metadata: JSON.parse(JSON.stringify(dto)),
       },
-    })
+    });
+
+    if (
+      dto.assignedToId &&
+      dto.assignedToId !== existing.assignedToId &&
+      dto.assignedToId !== memberId
+    ) {
+      void this.notifications
+        .create(tenantId, dto.assignedToId, {
+          eventType: 'FEATURE_ASSIGNED',
+          title: 'Feature assigned to you',
+          message: `"${feature.title}" has been assigned to you`,
+          severity: 'INFO',
+          featureId: feature.id,
+          deduplicationKey: `FEATURE_ASSIGNED-${feature.id}-${dto.assignedToId}`,
+        })
+        .catch(() => {});
+    }
+
+    if (
+      dto.status === 'DONE' &&
+      feature.assignedTo &&
+      feature.assignedTo.id !== memberId
+    ) {
+      void this.notifications
+        .create(tenantId, feature.assignedTo.id, {
+          eventType: 'FEATURE_COMPLETED',
+          title: 'Feature marked as done',
+          message: `"${feature.title}" has been marked as done`,
+          severity: 'INFO',
+          featureId: feature.id,
+          deduplicationKey: `FEATURE_COMPLETED-${feature.id}`,
+        })
+        .catch(() => {});
+    }
     return feature;
   }
 
-  async remove(tenantId: string, memberId: string, id: string){
+  async remove(tenantId: string, memberId: string, id: string) {
     const existing = await this.prisma.feature.findFirst({
-      where: { id, tenantId},
-    })
+      where: { id, tenantId },
+    });
 
-    if(!existing) throw new NotFoundException('Feature not found');
+    if (!existing) throw new NotFoundException('Feature not found');
 
     await this.prisma.activityLog.create({
       data: {
@@ -246,8 +307,8 @@ export class FeaturesService {
     });
 
     await this.prisma.feature.delete({
-      where: { id }
-    })
-    return { message: "Feature deleted successfully"}
+      where: { id },
+    });
+    return { message: 'Feature deleted successfully' };
   }
 }

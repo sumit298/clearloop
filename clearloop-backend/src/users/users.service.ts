@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { UpdateOwnProfileDto, UpdateUserDto } from './dto/update-user.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const MEMBER_SELECT = {
   id: true,
@@ -22,7 +23,10 @@ const MEMBER_SELECT = {
 
 @Injectable()
 export class UserService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   // Adds an existing-or-new person directly to a workspace (no invitation
   // email flow). Mirrors the identity split used in auth.service register():
@@ -170,7 +174,7 @@ export class UserService {
       (dto.role && dto.role !== existing.role) ||
       (dto.isActive !== undefined && dto.isActive !== existing.isActive);
 
-    return this.prisma.workspaceMember.update({
+    const updated = await this.prisma.workspaceMember.update({
       where: { id: targetmemberId },
       data: {
         ...dto,
@@ -178,6 +182,18 @@ export class UserService {
       },
       select: MEMBER_SELECT,
     });
+
+    if (dto.role && dto.role !== existing.role) {
+      void this.notifications.create(tenantId, targetmemberId, {
+        eventType: 'ROLE_CHANGED',
+        title: 'Your role has been updated',
+        message: `Your role has been changed to ${dto.role}`,
+        severity: 'INFO',
+        deduplicationKey: `ROLE_CHANGED-${targetmemberId}-${dto.role}`,
+      }).catch(() => {});
+    }
+
+    return updated;
   }
 
   async deactiveUser(tenantId: string, id: string) {
