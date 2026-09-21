@@ -46,6 +46,17 @@ export class NotificationsService {
 
       // Send the full persisted record so SSE consumers can update without a
       // follow-up request. Keep SUMMARY for existing consumers.
+      this.logger.log(
+        JSON.stringify({
+          event: "notification.created",
+          id: notification.id,
+          eventType: notification.eventType,
+          severity: notification.severity,
+          memberId,
+          tenantId,
+          deduplicationKey: notification.deduplicationKey,
+        })
+      )
       this.push(memberId, { type: 'NOTIFICATION', data: notification });
       this.push(memberId, {
         type: 'SUMMARY',
