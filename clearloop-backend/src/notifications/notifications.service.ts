@@ -18,8 +18,12 @@ import {
 import type { CreateNotificationDTO } from './dto/notifications.dto';
 
 export type SseEvent =
-  | { type: 'NOTIFICATION'; data: { id: string } }
-  | { type: 'SUMMARY' | 'HEARTBEAT'; data: unknown };
+  | { type: 'NOTIFICATION'; data: Record<string, unknown> }
+  | {
+      type: 'SUMMARY';
+      data: Partial<Record<'INFO' | 'WARNING' | 'ALERT', number>>;
+    }
+  | { type: 'HEARTBEAT'; data: '' };
 
 @Injectable()
 export class NotificationsService {
@@ -48,15 +52,15 @@ export class NotificationsService {
       // follow-up request. Keep SUMMARY for existing consumers.
       this.logger.log(
         JSON.stringify({
-          event: "notification.created",
+          event: 'notification.created',
           id: notification.id,
           eventType: notification.eventType,
           severity: notification.severity,
           memberId,
           tenantId,
           deduplicationKey: notification.deduplicationKey,
-        })
-      )
+        }),
+      );
       this.push(memberId, { type: 'NOTIFICATION', data: notification });
       this.push(memberId, {
         type: 'SUMMARY',
