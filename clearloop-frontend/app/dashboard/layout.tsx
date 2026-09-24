@@ -27,6 +27,8 @@ import {
   Users,
 } from "lucide-react";
 import { useState } from "react";
+import { useNotificationStream } from "@/lib/hooks/useNotificationStream";
+import { NotificationBell } from "@/components/notifications/NotificationsBell";
 
 const navigation = [
   { name: "Overview", href: "/dashboard", icon: LayoutGrid, exact: true },
@@ -74,6 +76,7 @@ export default function DashboardLayout({
     });
   };
 
+  useNotificationStream();
   const handleLogout = () => {
     logout();
     router.push("/");
@@ -98,6 +101,7 @@ export default function DashboardLayout({
                 </span>
               )}
             </Link>
+            
           </div>
           <nav className="flex flex-1 flex-col gap-0.5 px-3 py-2">
             {!collapsed && (
@@ -193,6 +197,7 @@ export default function DashboardLayout({
                   <Moon className="size-4" />
                 )}
               </button>
+              <NotificationBell/>
               <button
                 type="button"
                 onClick={() => setPaletteOpen(true)}

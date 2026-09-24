@@ -19,6 +19,7 @@ const MEMBER_SELECT = {
   githubUsername: true,
   avatarUrl: true,
   onboardingDismissedAt: true,
+  updatedAt: true,
 } as const;
 
 @Injectable()
@@ -184,13 +185,13 @@ export class UserService {
     });
 
     if (dto.role && dto.role !== existing.role) {
-      void this.notifications.create(tenantId, targetmemberId, {
+      await this.notifications.notifySafely(tenantId, targetmemberId, {
         eventType: 'ROLE_CHANGED',
         title: 'Your role has been updated',
         message: `Your role has been changed to ${dto.role}`,
         severity: 'INFO',
-        deduplicationKey: `ROLE_CHANGED-${targetmemberId}-${dto.role}`,
-      }).catch(() => {});
+        deduplicationKey: `ROLE_CHANGED-${targetmemberId}-${existing.role}-${dto.role}-${updated.updatedAt.toISOString()}`,
+      });
     }
 
     return updated;

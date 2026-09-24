@@ -9,7 +9,7 @@ import {
   Req,
 } from '@nestjs/common';
 
-import { Observable, distinct, finalize, interval, map, merge } from 'rxjs';
+import { Observable, filter, finalize, interval, map, merge } from 'rxjs';
 import type { MessageEvent } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { QueryNotificationsDto, MarkReadDTO } from './dto/notifications.dto';
@@ -49,20 +49,26 @@ export class NotificationsController {
     const memberId = req.user.memberId;
     const lastEventId = req.get('Last-Event-ID')?.trim() || undefined;
 
+    // Bounded dedup set — only tracks NOTIFICATION ids, capped at 500 entries.
+    const seen = new Set<string>();
+
     const notifications$ = merge(
       this.notificationsService.getStream(memberId),
       this.notificationsService.getPersistedStream(memberId, lastEventId),
     ).pipe(
-      // The persisted poll can observe the same event already delivered by
-      // the local Subject. Suppress that duplicate per SSE connection.
-      distinct((event) =>
-        event.type === 'NOTIFICATION' ? event.data.id : event,
-      ),
+      filter((event) => {
+        if (event.type !== 'NOTIFICATION') return true;
+        const id = event.data['id'] as string;
+        if (seen.has(id)) return false;
+        if (seen.size >= 500) seen.clear();
+        seen.add(id);
+        return true;
+      }),
       map(
         (event) =>
           ({
             data: event,
-            ...(event.type === 'NOTIFICATION' && { id: event.data.id }),
+            ...(event.type === 'NOTIFICATION' && { id: event.data['id'] }),
           }) as MessageEvent,
       ),
     );

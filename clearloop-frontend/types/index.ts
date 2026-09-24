@@ -1,43 +1,43 @@
 export enum UserRole {
-  ADMIN = 'ADMIN',
-  MANAGER = 'MANAGER',
-  DEVELOPER = 'DEVELOPER',
-  VIEWER = 'VIEWER',
+  ADMIN = "ADMIN",
+  MANAGER = "MANAGER",
+  DEVELOPER = "DEVELOPER",
+  VIEWER = "VIEWER",
 }
 
 export enum FeatureStatus {
-  PLANNED = 'PLANNED',
-  IN_PROGRESS = 'IN_PROGRESS',
-  IN_REVIEW = 'IN_REVIEW',
-  DONE = 'DONE',
-  CANCELLED = 'CANCELLED',
+  PLANNED = "PLANNED",
+  IN_PROGRESS = "IN_PROGRESS",
+  IN_REVIEW = "IN_REVIEW",
+  DONE = "DONE",
+  CANCELLED = "CANCELLED",
 }
 
 export enum FeaturePriority {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-  CRITICAL = 'CRITICAL',
+  LOW = "LOW",
+  MEDIUM = "MEDIUM",
+  HIGH = "HIGH",
+  CRITICAL = "CRITICAL",
 }
 
 export enum PullRequestStatus {
-  OPEN = 'OPEN',
-  MERGED = 'MERGED',
-  CLOSED = 'CLOSED',
+  OPEN = "OPEN",
+  MERGED = "MERGED",
+  CLOSED = "CLOSED",
 }
 
 export enum BugSeverity {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-  CRITICAL = 'CRITICAL',
+  LOW = "LOW",
+  MEDIUM = "MEDIUM",
+  HIGH = "HIGH",
+  CRITICAL = "CRITICAL",
 }
 
 export enum BugStatus {
-  OPEN = 'OPEN',
-  IN_PROGRESS = 'IN_PROGRESS',
-  RESOLVED = 'RESOLVED',
-  CLOSED = 'CLOSED',
+  OPEN = "OPEN",
+  IN_PROGRESS = "IN_PROGRESS",
+  RESOLVED = "RESOLVED",
+  CLOSED = "CLOSED",
 }
 
 export interface User {
@@ -58,7 +58,7 @@ export interface Tenant {
   id: string;
   name: string;
   slug: string;
-  plan: 'FREE' | 'PRO';
+  plan: "FREE" | "PRO";
   createdAt: string;
   updatedAt: string;
 }
@@ -178,4 +178,33 @@ export interface UpdateFeatureDto {
   status?: FeatureStatus;
   priority?: FeaturePriority;
   assignedToId?: string;
+}
+
+export type NotificationSeverity = "INFO" | "WARNING" | "ALERT";
+
+export interface Notification {
+  id: string;
+  tenantId: string;
+  memberId: string;
+  eventType: string;
+  title: string;
+  message: string;
+  actorName?: string;
+  severity: NotificationSeverity;
+  featureId?: string;
+  bugReportId?: string;
+  pullRequestId?: string;
+  deduplicationKey?: string;
+  readAt?: string | null;
+  createdAt: string;
+}
+
+export interface NotificationPage {
+  data: Notification[];
+  meta: {
+    totalCount: number;
+    unreadCount: number;
+    hasMore: boolean;
+    nextCursor?: string;
+  };
 }
