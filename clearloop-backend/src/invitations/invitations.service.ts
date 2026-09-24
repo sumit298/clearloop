@@ -230,14 +230,14 @@ export class InvitationsService {
     });
 
     if (invitation.invitedByMemberId) {
-      void this.notifications.create(invitation.tenantId, invitation.invitedByMemberId, {
+      await this.notifications.create(invitation.tenantId, invitation.invitedByMemberId, {
         eventType: 'INVITATION_ACCEPTED',
         title: 'Invitation accepted',
         message: `${name} has joined the workspace`,
         severity: 'INFO',
         actorName: name,
         deduplicationKey: `INVITATION_ACCEPTED-${invitation.id}`,
-      }).catch(() => {});
+      });
     }
 
     return result;

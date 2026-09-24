@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/contexts/AuthContext";
 import type { NotificationPage, NotificationSeverity } from "@/types";
 
 const PAGE_SIZE = 16;
+const SEVERITIES: NotificationSeverity[] = ["WARNING", "ALERT", "INFO"];
 
 type NotificationCache = { pages: NotificationPage[]; pageParams: unknown[] };
 
@@ -72,26 +73,9 @@ export function useNotifications() {
       const fresh = await fetchNotificationPage({ severity, size: PAGE_SIZE });
       queryClient.setQueryData<NotificationCache>(
         notificationQueryKey(severity),
-        (old) => {
-          if (!old || old.pages.length === 0)
-            return { pages: [fresh], pageParams: [undefined] };
-          const [firstPage, ...rest] = old.pages;
-          const seen = new Set(
-            old.pages.flatMap((p) => p.data.map((n) => n.id)),
-          );
-          const added = fresh.data.filter((n) => !seen.has(n.id));
-          return {
-            ...old,
-            pages: [
-              {
-                ...firstPage,
-                meta: fresh.meta,
-                data: [...added, ...firstPage.data],
-              },
-              ...rest,
-            ],
-          };
-        },
+        // Replacing the cache avoids overlapping pages and keeps page 1 at
+        // PAGE_SIZE after new rows shift the cursor boundary.
+        () => ({ pages: [fresh], pageParams: [undefined] }),
       );
     },
     [queryClient],
@@ -104,15 +88,25 @@ export function useNotifications() {
     }: {
       uuids?: string[];
       all?: boolean;
-      severity: NotificationSeverity;
+      severity: NotificationSeverity | "ALL";
     }) => notificationsApi.markRead(uuids, all),
     onError: (_, vars) => {
-      queryClient.invalidateQueries({
-        queryKey: notificationQueryKey(vars.severity),
-      });
+      if (vars.severity === "ALL") {
+        SEVERITIES.forEach((severity) =>
+          queryClient.invalidateQueries({ queryKey: notificationQueryKey(severity) }),
+        );
+      } else {
+        queryClient.invalidateQueries({
+          queryKey: notificationQueryKey(vars.severity),
+        });
+      }
     },
     onSettled: (_, __, vars) => {
-      mergeNewNotifications(vars.severity);
+      if (vars.severity === "ALL") {
+        void Promise.all(SEVERITIES.map((severity) => mergeNewNotifications(severity)));
+      } else {
+        void mergeNewNotifications(vars.severity);
+      }
     },
   });
 
@@ -141,6 +135,27 @@ export function useNotifications() {
     [queryClient, markReadMutate],
   );
 
+  const markAllAsRead = useCallback(() => {
+    const now = new Date().toISOString();
+    SEVERITIES.forEach((severity) => {
+      queryClient.setQueryData<NotificationCache>(
+        notificationQueryKey(severity),
+        (old) =>
+          old && {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              meta: { ...page.meta, unreadCount: 0 },
+              data: page.data.map((notification) =>
+                notification.readAt ? notification : { ...notification, readAt: now },
+              ),
+            })),
+          },
+      );
+    });
+    markReadMutate({ all: true, severity: "ALL" });
+  }, [markReadMutate, queryClient]);
+
   
 
   const unreadCount = (
@@ -150,5 +165,5 @@ export function useNotifications() {
     0,
   );
 
-  return { queries, unreadCount, markAsRead, mergeNewNotifications };
+  return { queries, unreadCount, markAsRead, markAllAsRead, mergeNewNotifications };
 }

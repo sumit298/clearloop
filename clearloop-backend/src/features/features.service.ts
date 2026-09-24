@@ -127,17 +127,15 @@ export class FeaturesService {
     });
 
     if (feature.assignedTo && feature.assignedTo.id !== memberId) {
-      void this.notifications
-        .create(tenantId, feature.assignedTo.id, {
-          eventType: 'FEATURE_ASSIGNED',
-          title: 'Feature assigned to you',
-          message: `"${feature.title}" has been assigned to you`,
-          severity: 'INFO',
-          actorName: feature.createdBy.name ?? undefined,
-          featureId: feature.id,
-          deduplicationKey: `FEATURE_ASSIGNED-${feature.id}-${feature.assignedTo.id}`,
-        })
-        .catch(() => {});
+      await this.notifications.create(tenantId, feature.assignedTo.id, {
+        eventType: 'FEATURE_ASSIGNED',
+        title: 'Feature assigned to you',
+        message: `"${feature.title}" has been assigned to you`,
+        severity: 'INFO',
+        actorName: feature.createdBy.name ?? undefined,
+        featureId: feature.id,
+        deduplicationKey: `FEATURE_ASSIGNED-${feature.id}-${feature.assignedTo.id}`,
+      });
     }
 
     return feature;
@@ -258,33 +256,30 @@ export class FeaturesService {
       dto.assignedToId !== existing.assignedToId &&
       dto.assignedToId !== memberId
     ) {
-      void this.notifications
-        .create(tenantId, dto.assignedToId, {
-          eventType: 'FEATURE_ASSIGNED',
-          title: 'Feature assigned to you',
-          message: `"${feature.title}" has been assigned to you`,
-          severity: 'INFO',
-          featureId: feature.id,
-          deduplicationKey: `FEATURE_ASSIGNED-${feature.id}-${dto.assignedToId}`,
-        })
-        .catch(() => {});
+      await this.notifications.create(tenantId, dto.assignedToId, {
+        eventType: 'FEATURE_ASSIGNED',
+        title: 'Feature assigned to you',
+        message: `"${feature.title}" has been assigned to you`,
+        severity: 'INFO',
+        featureId: feature.id,
+        deduplicationKey: `FEATURE_ASSIGNED-${feature.id}-${dto.assignedToId}-${feature.updatedAt.toISOString()}`,
+      });
     }
 
     if (
       dto.status === 'DONE' &&
+      existing.status !== 'DONE' &&
       feature.assignedTo &&
       feature.assignedTo.id !== memberId
     ) {
-      void this.notifications
-        .create(tenantId, feature.assignedTo.id, {
-          eventType: 'FEATURE_COMPLETED',
-          title: 'Feature marked as done',
-          message: `"${feature.title}" has been marked as done`,
-          severity: 'INFO',
-          featureId: feature.id,
-          deduplicationKey: `FEATURE_COMPLETED-${feature.id}`,
-        })
-        .catch(() => {});
+      await this.notifications.create(tenantId, feature.assignedTo.id, {
+        eventType: 'FEATURE_COMPLETED',
+        title: 'Feature marked as done',
+        message: `"${feature.title}" has been marked as done`,
+        severity: 'INFO',
+        featureId: feature.id,
+        deduplicationKey: `FEATURE_COMPLETED-${feature.id}-${feature.updatedAt.toISOString()}`,
+      });
     }
     return feature;
   }

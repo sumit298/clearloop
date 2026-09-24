@@ -16,10 +16,15 @@ type NotificationCache = { pages: NotificationPage[]; pageParams: unknown[] };
 const SEVERITIES: NotificationSeverity[] = ["WARNING", "ALERT", "INFO"];
 
 export function useNotificationStream() {
-  const { token, isAuthenticated } = useAuth();
+  const { token, isAuthenticated, logout } = useAuth();
   const queryClient = useQueryClient();
   const { mergeNewNotifications } = useNotifications();
   const stopRef = useRef<{ close: () => void } | null>(null);
+  const logoutRef = useRef(logout);
+
+  useEffect(() => {
+    logoutRef.current = logout;
+  }, [logout]);
 
   useEffect(() => {
     if (!isAuthenticated || !token) return;
@@ -41,7 +46,10 @@ export function useNotificationStream() {
                     ...first,
                     meta: {
                       ...first.meta,
-                      unreadCount: first.meta.unreadCount + 1,
+                      // Only increment for genuinely unread notifications
+                      unreadCount: notification.readAt
+                        ? first.meta.unreadCount
+                        : first.meta.unreadCount + 1,
                     },
                     data: [notification, ...(first?.data ?? [])],
                   },
@@ -55,6 +63,13 @@ export function useNotificationStream() {
             mergeNewNotifications(s),
           );
         }
+      },
+      onError: (error) => {
+        if (error instanceof Error && error.message === "Unauthorized") {
+          logoutRef.current();
+          return;
+        }
+        console.error('Notification stream error:', error);
       },
     });
 

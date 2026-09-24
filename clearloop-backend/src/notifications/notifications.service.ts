@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   Observable,
@@ -34,38 +35,54 @@ export class NotificationsService {
 
   async create(tenantId: string, memberId: string, dto: CreateNotificationDTO) {
     try {
-      // Upsert so webhook retries do not create duplicate notifications.
-      const notification = await this.prisma.notification.upsert({
-        where: {
-          memberId_deduplicationKey: {
-            memberId,
-            deduplicationKey:
-              dto.deduplicationKey ??
-              `${dto.eventType}-${memberId}-${Date.now()}`,
-          },
-        },
-        create: { tenantId, memberId, ...dto },
-        update: {},
-      });
+      const deduplicationKey =
+        dto.deduplicationKey ??
+        `${dto.eventType}-${memberId}-${Date.now()}`;
 
-      // Send the full persisted record so SSE consumers can update without a
-      // follow-up request. Keep SUMMARY for existing consumers.
+      // Create first and let the database unique constraint arbitrate races.
+      // A read-before-upsert can let two concurrent requests both broadcast
+      // the same logical notification.
+      let notification: Awaited<
+        ReturnType<PrismaService['notification']['create']>
+      >;
+      let isNew = true;
+      try {
+        notification = await this.prisma.notification.create({
+          data: { tenantId, memberId, ...dto, deduplicationKey },
+        });
+      } catch (error) {
+        if (
+          !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+          error.code !== 'P2002'
+        ) {
+          throw error;
+        }
+
+        const existing = await this.prisma.notification.findUnique({
+          where: { memberId_deduplicationKey: { memberId, deduplicationKey } },
+        });
+        if (!existing) throw error;
+        notification = existing;
+        isNew = false;
+      }
+
       this.logger.log(
         JSON.stringify({
-          event: 'notification.created',
+          event: isNew ? 'notification.created' : 'notification.deduplicated',
           id: notification.id,
           eventType: notification.eventType,
           severity: notification.severity,
           memberId,
           tenantId,
-          deduplicationKey: notification.deduplicationKey,
+          deduplicationKey,
         }),
       );
-      this.push(memberId, { type: 'NOTIFICATION', data: notification });
-      this.push(memberId, {
-        type: 'SUMMARY',
-        data: { [notification.severity]: 1 },
-      });
+
+      // Only push live events for genuinely new notifications.
+      if (isNew) {
+        this.push(memberId, { type: 'NOTIFICATION', data: notification });
+        this.push(memberId, { type: 'SUMMARY', data: { [notification.severity]: 1 } });
+      }
 
       return notification;
     } catch (error) {

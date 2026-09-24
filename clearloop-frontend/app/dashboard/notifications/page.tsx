@@ -24,9 +24,8 @@ const severityIcon = {
   ALERT:   { Icon: AlertCircle,   cls: "text-red-500" },
 };
 
-function NotificationRow({ n }: { n: Notification }) {
+function NotificationRow({ n, markAsRead }: { n: Notification; markAsRead: (severity: NotificationSeverity, id?: string) => void }) {
   const router = useRouter();
-  const { markAsRead } = useNotifications();
   const { Icon, cls } = severityIcon[n.severity];
   const dest = n.featureId ? `/dashboard/features/${n.featureId}`
     : n.bugReportId ? `/dashboard/bugs/${n.bugReportId}`
@@ -58,7 +57,7 @@ function NotificationRow({ n }: { n: Notification }) {
 
 export default function NotificationsPage() {
   const [tab, setTab] = useState<Tab>("ALL");
-  const { queries, unreadCount, markAsRead } = useNotifications();
+  const { queries, unreadCount, markAsRead, markAllAsRead } = useNotifications();
 
   const severities: NotificationSeverity[] = tab === "ALL" ? ["WARNING", "ALERT", "INFO"] : [tab];
 
@@ -70,6 +69,7 @@ export default function NotificationsPage() {
   const earlier = all.filter((n) => !isToday(new Date(n.createdAt)));
 
   const isLoading = severities.some((s) => !queries[s].isFetched);
+  const isError = severities.some((s) => queries[s].isError);
   const activeQuery = tab !== "ALL" ? queries[tab] : null;
 
   return (
@@ -80,7 +80,7 @@ export default function NotificationsPage() {
         actions={
           unreadCount > 0 ? (
             <button
-              onClick={() => (["WARNING", "ALERT", "INFO"] as NotificationSeverity[]).forEach((s) => markAsRead(s))}
+              onClick={markAllAsRead}
               className="text-[13px] text-muted-foreground hover:text-foreground"
             >
               Mark all as read
@@ -105,6 +105,8 @@ export default function NotificationsPage() {
       <div className="space-y-6 p-6">
         {isLoading ? (
           <p className="text-[13px] text-muted-foreground">Loading…</p>
+        ) : isError ? (
+          <EmptyState icon={Bell} title="Failed to load notifications" description="Something went wrong. Please refresh the page." />
         ) : all.length === 0 ? (
           <EmptyState icon={Bell} title="No notifications" description="You're all caught up." />
         ) : (
@@ -113,7 +115,7 @@ export default function NotificationsPage() {
               <div>
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Today</p>
                 <div className="panel overflow-hidden divide-y divide-border">
-                  {today.map((n) => <NotificationRow key={n.id} n={n} />)}
+                  {today.map((n) => <NotificationRow key={n.id} n={n} markAsRead={markAsRead} />)}
                 </div>
               </div>
             )}
@@ -121,19 +123,32 @@ export default function NotificationsPage() {
               <div>
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Earlier</p>
                 <div className="panel overflow-hidden divide-y divide-border">
-                  {earlier.map((n) => <NotificationRow key={n.id} n={n} />)}
+                  {earlier.map((n) => <NotificationRow key={n.id} n={n} markAsRead={markAsRead} />)}
                 </div>
               </div>
             )}
-            {activeQuery?.hasNextPage && (
-              <button
-                onClick={() => activeQuery.fetchNextPage()}
-                disabled={activeQuery.isFetchingNextPage}
-                className="w-full rounded-md border border-border py-2.5 text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50"
-              >
-                {activeQuery.isFetchingNextPage ? "Loading…" : "Load more"}
-              </button>
-            )}
+            {tab === "ALL"
+              ? (["WARNING", "ALERT", "INFO"] as NotificationSeverity[]).map((s) =>
+                  queries[s].hasNextPage ? (
+                    <button key={s}
+                      onClick={() => queries[s].fetchNextPage()}
+                      disabled={queries[s].isFetchingNextPage}
+                      className="w-full rounded-md border border-border py-2.5 text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+                    >
+                      {queries[s].isFetchingNextPage ? "Loading…" : `Load more ${s.toLowerCase()}`}
+                    </button>
+                  ) : null
+                )
+              : activeQuery?.hasNextPage && (
+                  <button
+                    onClick={() => activeQuery.fetchNextPage()}
+                    disabled={activeQuery.isFetchingNextPage}
+                    className="w-full rounded-md border border-border py-2.5 text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  >
+                    {activeQuery.isFetchingNextPage ? "Loading…" : "Load more"}
+                  </button>
+                )
+            }
           </>
         )}
       </div>

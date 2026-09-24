@@ -663,7 +663,7 @@ export class GithubService {
         select: { assignedToId: true, title: true },
       });
       if (feature?.assignedToId) {
-        void this.notifications.create(tenantId, feature.assignedToId, {
+        await this.notifications.create(tenantId, feature.assignedToId, {
           eventType: 'PR_OPENED',
           title: 'PR opened on your feature',
           message: `"${pr.title}" was opened by ${pr.user?.login ?? 'someone'}`,
@@ -672,7 +672,7 @@ export class GithubService {
           featureId,
           pullRequestId: result.pullRequestId,
           deduplicationKey: `PR_OPENED-${result.pullRequestId}`,
-        }).catch(() => {});
+        });
       }
     }
 
@@ -772,7 +772,7 @@ export class GithubService {
         select: { assignedToId: true, title: true },
       });
       if (feature?.assignedToId) {
-        void this.notifications.create(tenantId, feature.assignedToId, {
+        await this.notifications.create(tenantId, feature.assignedToId, {
           eventType: 'PR_MERGED',
           title: 'PR merged on your feature',
           message: `"${pr.title}" was merged`,
@@ -781,7 +781,7 @@ export class GithubService {
           featureId: pullRequest.featureId,
           pullRequestId: pullRequest.id,
           deduplicationKey: `PR_MERGED-${pullRequest.id}`,
-        }).catch(() => {});
+        });
       }
     }
 
@@ -1043,14 +1043,14 @@ export class GithubService {
     });
 
     if (result.assignedToId && result.assignedToId !== memberId) {
-      void this.notifications.create(tenantId, result.assignedToId, {
+      await this.notifications.create(tenantId, result.assignedToId, {
         eventType: 'PR_LINKED',
         title: 'PR linked to your feature',
         message: `A pull request was manually linked to "${result.featureTitle}"`,
         severity: 'INFO',
         featureId,
-        deduplicationKey: `PR_LINKED-${pullRequestId}`,
-      }).catch(() => {});
+        deduplicationKey: `PR_LINKED-${pullRequestId}-${new Date().toISOString()}`,
+      });
     }
 
     return { message: result.message };

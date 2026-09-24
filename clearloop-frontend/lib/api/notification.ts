@@ -52,13 +52,28 @@ export function openNotificationStream(
   const base = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '');
   let closed = false;
   let controller = new AbortController();
+  let lastEventId: string | null = null;
 
   async function readStream() {
     controller = new AbortController();
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      Accept: 'text/event-stream',
+    };
+    if (lastEventId) headers['Last-Event-ID'] = lastEventId;
+
     const res = await fetch(`${base}/notifications/stream`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'text/event-stream' },
+      headers,
       signal: controller.signal,
     });
+
+    // 401 — token is dead, stop reconnecting
+    if (res.status === 401) {
+      closed = true;
+      handlers.onError?.(new Error('Unauthorized'));
+      return;
+    }
+
     if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.status}`);
 
     const reader = res.body.getReader();
@@ -68,13 +83,23 @@ export function openNotificationStream(
     while (!closed) {
       const { value, done } = await reader.read();
       if (done) break;
-      buf += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+      buf += decoder.decode(value, { stream: true });
+      buf = buf.replace(/\r\n/g, '\n');
       const events = buf.split('\n\n');
       buf = events.pop() ?? '';
-      for (const event of events) {
-        const data = parseEventData(event);
+      for (const raw of events) {
+        // Track Last-Event-ID from the id: line
+        const idLine = raw.split('\n').find((l) => l.startsWith('id:'));
+        if (idLine) lastEventId = idLine.slice(3).trim();
+
+        const data = parseEventData(raw);
         if (!data) continue;
-        const payload = JSON.parse(data) as NotificationStreamMessage;
+        let payload: NotificationStreamMessage;
+        try {
+          payload = JSON.parse(data) as NotificationStreamMessage;
+        } catch {
+          continue; // skip malformed event, do not crash stream
+        }
         if (!payload?.type) continue;
         handlers.onMessage(payload);
       }

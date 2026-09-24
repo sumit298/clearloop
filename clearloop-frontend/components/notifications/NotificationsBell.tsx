@@ -15,9 +15,8 @@ const severityIcon = {
   ALERT:   { Icon: AlertCircle,   cls: "text-red-500" },
 };
 
-function NotificationRow({ n, onClose }: { n: Notification; onClose: () => void }) {
+function NotificationRow({ n, onClose, markAsRead }: { n: Notification; onClose: () => void; markAsRead: (severity: NotificationSeverity, id?: string) => void }) {
   const router = useRouter();
-  const { markAsRead } = useNotifications();
   const { Icon, cls } = severityIcon[n.severity];
   const dest = n.featureId ? `/dashboard/features/${n.featureId}`
     : n.bugReportId ? `/dashboard/bugs/${n.bugReportId}`
@@ -51,7 +50,14 @@ function NotificationRow({ n, onClose }: { n: Notification; onClose: () => void 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const { queries, unreadCount, markAsRead } = useNotifications();
+  const { queries, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+
+  const isLoading = (["WARNING", "ALERT", "INFO"] as NotificationSeverity[]).some(
+    (s) => !queries[s].isFetched,
+  );
+  const isError = (["WARNING", "ALERT", "INFO"] as NotificationSeverity[]).some(
+    (s) => queries[s].isError,
+  );
 
   const notifications = (["WARNING", "ALERT", "INFO"] as NotificationSeverity[])
     .flatMap((s) => queries[s].data?.pages[0]?.data ?? [])
@@ -75,7 +81,8 @@ export function NotificationBell() {
       <button
         onClick={() => setOpen((o) => !o)}
         className="relative inline-flex size-8 items-center justify-center rounded-md hover:bg-[var(--surface-raised)]"
-        aria-label="Notifications"
+        aria-label={unreadCount > 0 ? `${unreadCount} unread notifications` : 'Notifications'}
+        aria-expanded={open}
       >
         <Bell className="size-4" />
         {unreadCount > 0 && (
@@ -91,7 +98,7 @@ export function NotificationBell() {
             <span className="text-[13px] font-semibold">Notifications</span>
             {unreadCount > 0 && (
               <button
-                onClick={() => (["WARNING", "ALERT", "INFO"] as NotificationSeverity[]).forEach((s) => markAsRead(s))}
+                onClick={markAllAsRead}
                 className="text-[12px] text-muted-foreground hover:text-foreground"
               >
                 Mark all read
@@ -99,9 +106,13 @@ export function NotificationBell() {
             )}
           </div>
           <div className="max-h-[420px] divide-y divide-border overflow-y-auto">
-            {notifications.length === 0
-              ? <p className="px-4 py-8 text-center text-[13px] text-muted-foreground">No notifications</p>
-              : notifications.map((n) => <NotificationRow key={n.id} n={n} onClose={() => setOpen(false)} />)
+            {isLoading
+              ? <p className="px-4 py-8 text-center text-[13px] text-muted-foreground">Loading…</p>
+              : isError
+                ? <p className="px-4 py-8 text-center text-[13px] text-muted-foreground">Failed to load notifications</p>
+              : notifications.length === 0
+                ? <p className="px-4 py-8 text-center text-[13px] text-muted-foreground">No notifications</p>
+                : notifications.map((n) => <NotificationRow key={n.id} n={n} onClose={() => setOpen(false)} markAsRead={markAsRead} />)
             }
           </div>
           <div className="border-t border-border">

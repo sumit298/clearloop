@@ -153,7 +153,7 @@ export class BugReportsService {
         select: { assignedToId: true, title: true },
       });
       if (feature?.assignedToId && feature.assignedToId !== memberId) {
-        void this.notifications.create(tenantId, feature.assignedToId, {
+      await this.notifications.create(tenantId, feature.assignedToId, {
           eventType: 'BUG_REPORTED',
           title: 'New bug reported on your feature',
           message: `"${dto.title}" was reported on "${feature.title}"`,
@@ -161,7 +161,7 @@ export class BugReportsService {
           featureId: dto.featureId,
           bugReportId: bugReport.id,
           deduplicationKey: `BUG_REPORTED-${bugReport.id}`,
-        }).catch(() => {});
+        });
       }
     }
 
@@ -319,21 +319,25 @@ export class BugReportsService {
     });
 
     // Notify feature assignee when bug is resolved
-    if (dto.status === 'RESOLVED' && bugReport.featureId) {
+    if (
+      dto.status === 'RESOLVED' &&
+      bugReport.status !== 'RESOLVED' &&
+      bugReport.featureId
+    ) {
       const feature = await this.prisma.feature.findFirst({
         where: { id: bugReport.featureId, tenantId },
         select: { assignedToId: true, title: true },
       });
       if (feature?.assignedToId && feature.assignedToId !== memberId) {
-        void this.notifications.create(tenantId, feature.assignedToId, {
+        await this.notifications.create(tenantId, feature.assignedToId, {
           eventType: 'BUG_RESOLVED',
           title: 'Bug resolved',
           message: `"${bugReport.title}" has been resolved`,
           severity: 'INFO',
           featureId: bugReport.featureId,
           bugReportId: bugReport.id,
-          deduplicationKey: `BUG_RESOLVED-${bugReport.id}`,
-        }).catch(() => {});
+          deduplicationKey: `BUG_RESOLVED-${bugReport.id}-${updated.updatedAt.toISOString()}`,
+        });
       }
     }
 

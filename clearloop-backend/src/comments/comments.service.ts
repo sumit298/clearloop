@@ -69,14 +69,14 @@ export class CommentsService {
         select: { assignedToId: true, title: true },
       });
       if (feature?.assignedToId && feature.assignedToId !== memberId) {
-        void this.notifications.create(tenantId, feature.assignedToId, {
+        await this.notifications.create(tenantId, feature.assignedToId, {
           eventType: 'COMMENT_ADDED',
           title: 'New comment on your feature',
           message: `Someone commented on "${feature.title}"`,
           severity: 'INFO',
           featureId: dto.featureId,
           deduplicationKey: `COMMENT_ADDED-${comment.id}`,
-        }).catch(() => {});
+        });
       }
     }
 
@@ -86,7 +86,7 @@ export class CommentsService {
         select: { reportedById: true, title: true, featureId: true },
       });
       if (bug?.reportedById && bug.reportedById !== memberId) {
-        void this.notifications.create(tenantId, bug.reportedById, {
+        await this.notifications.create(tenantId, bug.reportedById, {
           eventType: 'COMMENT_ADDED',
           title: 'New comment on your bug report',
           message: `Someone commented on "${bug.title}"`,
@@ -94,7 +94,7 @@ export class CommentsService {
           bugReportId: dto.bugReportId,
           featureId: bug.featureId ?? undefined,
           deduplicationKey: `COMMENT_ADDED-${comment.id}`,
-        }).catch(() => {});
+        });
       }
     }
 
