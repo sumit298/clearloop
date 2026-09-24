@@ -230,7 +230,7 @@ export class InvitationsService {
     });
 
     if (invitation.invitedByMemberId) {
-      await this.notifications.create(invitation.tenantId, invitation.invitedByMemberId, {
+      await this.notifications.notifySafely(invitation.tenantId, invitation.invitedByMemberId, {
         eventType: 'INVITATION_ACCEPTED',
         title: 'Invitation accepted',
         message: `${name} has joined the workspace`,

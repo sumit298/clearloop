@@ -100,6 +100,19 @@ export class NotificationsService {
     }
   }
 
+  async notifySafely(
+    tenantId: string,
+    memberId: string,
+    dto: CreateNotificationDTO,
+  ): Promise<void> {
+    try {
+      await this.create(tenantId, memberId, dto);
+    } catch {
+      // create() already logs the failure. Notification delivery must not
+      // turn a committed domain write into a failed request.
+    }
+  }
+
   async list(memberId: string, severity = 'ALL', cursor?: string, size = 16) {
     const severityFilter =
       severity === 'ALL'

@@ -135,4 +135,18 @@ describe('NotificationsService', () => {
       },
     });
   });
+
+  it('does not propagate notification failures through notifySafely', async () => {
+    notification.create.mockRejectedValue(new Error('database unavailable'));
+
+    await expect(
+      service.notifySafely('tenant-id', 'member-id', {
+        eventType: 'TEST',
+        title: 'Test',
+        message: 'Test message',
+        severity: 'INFO',
+        deduplicationKey: 'test-key',
+      }),
+    ).resolves.toBeUndefined();
+  });
 });

@@ -69,15 +69,8 @@ export function useNotifications() {
   const queries = { WARNING: warning, ALERT: alert, INFO: info } as const;
 
   const mergeNewNotifications = useCallback(
-    async (severity: NotificationSeverity) => {
-      const fresh = await fetchNotificationPage({ severity, size: PAGE_SIZE });
-      queryClient.setQueryData<NotificationCache>(
-        notificationQueryKey(severity),
-        // Replacing the cache avoids overlapping pages and keeps page 1 at
-        // PAGE_SIZE after new rows shift the cursor boundary.
-        () => ({ pages: [fresh], pageParams: [undefined] }),
-      );
-    },
+    (severity: NotificationSeverity) =>
+      queryClient.invalidateQueries({ queryKey: notificationQueryKey(severity) }),
     [queryClient],
   );
 
@@ -90,17 +83,6 @@ export function useNotifications() {
       all?: boolean;
       severity: NotificationSeverity | "ALL";
     }) => notificationsApi.markRead(uuids, all),
-    onError: (_, vars) => {
-      if (vars.severity === "ALL") {
-        SEVERITIES.forEach((severity) =>
-          queryClient.invalidateQueries({ queryKey: notificationQueryKey(severity) }),
-        );
-      } else {
-        queryClient.invalidateQueries({
-          queryKey: notificationQueryKey(vars.severity),
-        });
-      }
-    },
     onSettled: (_, __, vars) => {
       if (vars.severity === "ALL") {
         void Promise.all(SEVERITIES.map((severity) => mergeNewNotifications(severity)));

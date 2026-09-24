@@ -127,7 +127,7 @@ export class FeaturesService {
     });
 
     if (feature.assignedTo && feature.assignedTo.id !== memberId) {
-      await this.notifications.create(tenantId, feature.assignedTo.id, {
+      await this.notifications.notifySafely(tenantId, feature.assignedTo.id, {
         eventType: 'FEATURE_ASSIGNED',
         title: 'Feature assigned to you',
         message: `"${feature.title}" has been assigned to you`,
@@ -256,7 +256,7 @@ export class FeaturesService {
       dto.assignedToId !== existing.assignedToId &&
       dto.assignedToId !== memberId
     ) {
-      await this.notifications.create(tenantId, dto.assignedToId, {
+      await this.notifications.notifySafely(tenantId, dto.assignedToId, {
         eventType: 'FEATURE_ASSIGNED',
         title: 'Feature assigned to you',
         message: `"${feature.title}" has been assigned to you`,
@@ -272,7 +272,7 @@ export class FeaturesService {
       feature.assignedTo &&
       feature.assignedTo.id !== memberId
     ) {
-      await this.notifications.create(tenantId, feature.assignedTo.id, {
+      await this.notifications.notifySafely(tenantId, feature.assignedTo.id, {
         eventType: 'FEATURE_COMPLETED',
         title: 'Feature marked as done',
         message: `"${feature.title}" has been marked as done`,

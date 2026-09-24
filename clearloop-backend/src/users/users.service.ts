@@ -185,7 +185,7 @@ export class UserService {
     });
 
     if (dto.role && dto.role !== existing.role) {
-      await this.notifications.create(tenantId, targetmemberId, {
+      await this.notifications.notifySafely(tenantId, targetmemberId, {
         eventType: 'ROLE_CHANGED',
         title: 'Your role has been updated',
         message: `Your role has been changed to ${dto.role}`,

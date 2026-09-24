@@ -663,7 +663,7 @@ export class GithubService {
         select: { assignedToId: true, title: true },
       });
       if (feature?.assignedToId) {
-        await this.notifications.create(tenantId, feature.assignedToId, {
+        await this.notifications.notifySafely(tenantId, feature.assignedToId, {
           eventType: 'PR_OPENED',
           title: 'PR opened on your feature',
           message: `"${pr.title}" was opened by ${pr.user?.login ?? 'someone'}`,
@@ -772,7 +772,7 @@ export class GithubService {
         select: { assignedToId: true, title: true },
       });
       if (feature?.assignedToId) {
-        await this.notifications.create(tenantId, feature.assignedToId, {
+        await this.notifications.notifySafely(tenantId, feature.assignedToId, {
           eventType: 'PR_MERGED',
           title: 'PR merged on your feature',
           message: `"${pr.title}" was merged`,
@@ -1043,7 +1043,7 @@ export class GithubService {
     });
 
     if (result.assignedToId && result.assignedToId !== memberId) {
-      await this.notifications.create(tenantId, result.assignedToId, {
+      await this.notifications.notifySafely(tenantId, result.assignedToId, {
         eventType: 'PR_LINKED',
         title: 'PR linked to your feature',
         message: `A pull request was manually linked to "${result.featureTitle}"`,
