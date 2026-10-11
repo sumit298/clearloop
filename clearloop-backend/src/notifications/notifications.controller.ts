@@ -58,24 +58,34 @@ export class NotificationsController {
     ).pipe(
       filter((event) => {
         if (event.type !== 'NOTIFICATION') return true;
+
         const id = event.data['id'] as string;
+
         if (seen.has(id)) return false;
         if (seen.size >= 500) seen.clear();
+
         seen.add(id);
         return true;
       }),
       map(
-        (event) =>
-          ({
-            data: event,
-            ...(event.type === 'NOTIFICATION' && { id: event.data['id'] }),
-          }),
+        (event): MessageEvent => ({
+          data: event,
+          ...(event.type === 'NOTIFICATION' &&
+          typeof event.data['id'] === 'string'
+            ? { id: event.data['id'] }
+            : {}),
+        }),
       ),
     );
 
     const heartbeat$ = interval(30000).pipe(
-      map(() => ({ data: { type: 'HEARTBEAT', data: '' } }) as MessageEvent),
+      map(
+        (): MessageEvent => ({
+          data: { type: 'HEARTBEAT', data: '' },
+        }),
+      ),
     );
+
     return merge(notifications$, heartbeat$).pipe(
       finalize(() => this.notificationsService.removeStream(memberId)),
     );
