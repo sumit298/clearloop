@@ -69,7 +69,7 @@ export class NotificationsController {
           ({
             data: event,
             ...(event.type === 'NOTIFICATION' && { id: event.data['id'] }),
-          }) as MessageEvent,
+          }),
       ),
     );
 
