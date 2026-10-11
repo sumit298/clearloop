@@ -37,13 +37,15 @@ function JoinForm() {
     retry: false,
   });
 
-  const [nameOverride, setNameOverride] = useState<string | null>(null);
+  const [nameOverride, setNameOverride] = useState<{ email: string; value: string } | null>(null);
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   const invitedEmail = invitation?.email;
-  const name = nameOverride ?? invitedEmail?.split("@")[0] ?? "";
+  const name = nameOverride && nameOverride.email === invitedEmail
+    ? nameOverride.value
+    : invitedEmail?.split("@")[0] ?? "";
 
   if (!token) {
     return (
@@ -185,7 +187,7 @@ function JoinForm() {
             type="text"
             required
             value={name}
-            onChange={(event) => setNameOverride(event.target.value)}
+            onChange={(event) => setNameOverride({ email: invitedEmail ?? "", value: event.target.value })}
             placeholder="Jane Doe"
             className="mt-1.5 h-10 w-full rounded-md border border-border bg-surface px-3 text-[13px] outline-none focus:border-primary"
           />
