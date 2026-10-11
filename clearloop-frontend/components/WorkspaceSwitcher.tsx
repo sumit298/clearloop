@@ -4,6 +4,7 @@ import { useMyWorkspaces } from "@/hooks/useAuth";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { getErrorMessage } from "@/lib/api/errors";
 
 export function WorkspaceSwitcher({ compact = false }: { compact?: boolean }) {
   const { workspace, switchWorkspace } = useAuth();
@@ -25,8 +26,8 @@ export function WorkspaceSwitcher({ compact = false }: { compact?: boolean }) {
       await switchWorkspace(tenantId);
       setOpen(false);
       router.push("/dashboard");
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to switch workspace");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Failed to switch workspace"));
     } finally {
       setSwitching(false);
     }

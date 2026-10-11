@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -37,18 +37,13 @@ function JoinForm() {
     retry: false,
   });
 
-  const [name, setName] = useState("");
+  const [nameOverride, setNameOverride] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  // Seed the name from the invited email, keyed on the email itself. Guarding
-  // on `!name` instead would carry a name typed for one invitation over to a
-  // different one if the component stays mounted across tokens.
   const invitedEmail = invitation?.email;
-  useEffect(() => {
-    if (invitedEmail) setName(invitedEmail.split("@")[0] ?? "");
-  }, [invitedEmail]);
+  const name = nameOverride ?? invitedEmail?.split("@")[0] ?? "";
 
   if (!token) {
     return (
@@ -190,7 +185,7 @@ function JoinForm() {
             type="text"
             required
             value={name}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) => setNameOverride(event.target.value)}
             placeholder="Jane Doe"
             className="mt-1.5 h-10 w-full rounded-md border border-border bg-surface px-3 text-[13px] outline-none focus:border-primary"
           />

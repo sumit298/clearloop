@@ -47,7 +47,7 @@ export function AISection() {
               Ask the timeline,<br />not a chatbot.
             </h2>
             <p className="mt-5 text-[15px] leading-relaxed text-text-dim">
-              ClearLoop's assistant only answers from the linked record — PRs, ADRs,
+              ClearLoop&apos;s assistant only answers from the linked record — PRs, ADRs,
               releases, incidents. No invented context, no hallucinated owners. Every
               answer cites the source events it was built from.
             </p>

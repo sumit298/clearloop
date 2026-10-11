@@ -478,12 +478,13 @@ export function PipelineBar({ segments }: { segments: StackSegment[] }) {
     );
   }
 
-  let offset = 0;
-  const placed = visible.map((segment) => {
+  const placed = visible.map((segment, index) => {
     const segmentWidth = (segment.value / sum) * usable;
-    const item = { ...segment, x: offset, width: segmentWidth };
-    offset += segmentWidth + GAP;
-    return item;
+    const x = visible.slice(0, index).reduce(
+      (offset, previous) => offset + (previous.value / sum) * usable + GAP,
+      0,
+    );
+    return { ...segment, x, width: segmentWidth };
   });
 
   return (

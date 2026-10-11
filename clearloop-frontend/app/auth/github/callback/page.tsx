@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useCallback, useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 function GitHubCallbackContent() {
@@ -9,11 +9,7 @@ function GitHubCallbackContent() {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('Connecting to GitHub...');
 
-  useEffect(() => {
-    handleCallback();
-  }, []);
-
-  const handleCallback = async () => {
+  const handleCallback = useCallback(async () => {
     try {
       const installationId = searchParams.get('installation_id');
       const setupAction = searchParams.get('setup_action');
@@ -44,16 +40,23 @@ function GitHubCallbackContent() {
         router.push('/dashboard/settings?github=connected');
       }, 1500);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('GitHub callback error:', error);
       setStatus('error');
-      setMessage(error.message || 'Failed to connect GitHub');
+      setMessage(error instanceof Error ? error.message : 'Failed to connect GitHub');
       
       setTimeout(() => {
         router.push('/dashboard/settings?github=error');
       }, 3000);
     }
-  };
+  }, [router, searchParams]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void handleCallback();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [handleCallback]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background text-foreground">

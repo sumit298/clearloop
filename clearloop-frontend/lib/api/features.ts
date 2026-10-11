@@ -63,7 +63,7 @@ export interface Feature {
   activityLogs?: Array<{
     id: string;
     action: string;
-    metadata?: any;
+    metadata?: Record<string, unknown>;
     createdAt: string;
     user: {
       id: string;

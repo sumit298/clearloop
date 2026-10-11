@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CircleDot, Plus } from "lucide-react";
@@ -44,10 +44,8 @@ export default function FeaturesPage() {
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const [sort, setSort] = useState("priority");
   const [view, setView] = useState<ViewMode>("table");
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] = useState(() => searchParams.get("create") === "1");
   const [form, setForm] = useState({ title: "", description: "", reason: "", projectId: "", assignedToId: "", priority: "MEDIUM" });
-
-  useEffect(() => { if (searchParams.get("create") === "1") setShowCreate(true); }, [searchParams]);
 
   const toggle = (set: (fn: (v: string[]) => string[]) => void) => (v: string) =>
     set((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]);
