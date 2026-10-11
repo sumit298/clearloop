@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CircleDot, Plus } from "lucide-react";
 import { PageHeader, EmptyState, Section } from "@/components/clearloop/primitives";
@@ -33,6 +33,7 @@ const PRIORITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
 const STATUS_ORDER = ["PLANNED", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"];
 
 export default function FeaturesPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { data: features, isLoading } = useFeatures();
   const { data: projects } = useProjects();
@@ -44,10 +45,16 @@ export default function FeaturesPage() {
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const [sort, setSort] = useState("priority");
   const [view, setView] = useState<ViewMode>("table");
-  const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ title: "", description: "", reason: "", projectId: "", assignedToId: "", priority: "MEDIUM" });
+  const showCreate = searchParams.get("create") === "1";
 
-  useEffect(() => { if (searchParams.get("create") === "1") setShowCreate(true); }, [searchParams]);
+  const setCreateDialogOpen = (open: boolean) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (open) params.set("create", "1");
+    else params.delete("create");
+    const query = params.toString();
+    router.replace(query ? `/dashboard/features?${query}` : "/dashboard/features", { scroll: false });
+  };
 
   const toggle = (set: (fn: (v: string[]) => string[]) => void) => (v: string) =>
     set((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]);
@@ -66,7 +73,7 @@ export default function FeaturesPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    try { await createFeature.mutateAsync(form); setShowCreate(false); setForm({ title: "", description: "", reason: "", projectId: "", assignedToId: "", priority: "MEDIUM" }); }
+    try { await createFeature.mutateAsync(form); setCreateDialogOpen(false); setForm({ title: "", description: "", reason: "", projectId: "", assignedToId: "", priority: "MEDIUM" }); }
     catch { /* error shown via mutation state */ }
   };
 
@@ -79,7 +86,7 @@ export default function FeaturesPage() {
         title="Features"
         description="Every planned, in-flight and shipped change, with the reasoning attached."
         actions={
-          <button onClick={() => setShowCreate(true)} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-[12px] font-medium text-primary-foreground">
+          <button onClick={() => setCreateDialogOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-[12px] font-medium text-primary-foreground">
             <Plus className="size-3.5" /> New feature
           </button>
         }
@@ -104,7 +111,7 @@ export default function FeaturesPage() {
               action={
                 <div className="flex gap-2">
                   <button onClick={clearAll} className="inline-flex h-8 items-center rounded-md border border-border px-3 text-[12px]">Clear filters</button>
-                  <button onClick={() => setShowCreate(true)} className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-[12px] font-medium text-primary-foreground">New feature</button>
+                  <button onClick={() => setCreateDialogOpen(true)} className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-[12px] font-medium text-primary-foreground">New feature</button>
                 </div>
               }
             />
@@ -191,7 +198,7 @@ export default function FeaturesPage() {
                 </select>
               </div>
               <div className="flex justify-end gap-2 pt-1">
-                <button type="button" onClick={() => setShowCreate(false)} className="h-8 rounded-md border border-border px-3 text-[12px]">Cancel</button>
+                <button type="button" onClick={() => setCreateDialogOpen(false)} className="h-8 rounded-md border border-border px-3 text-[12px]">Cancel</button>
                 <button type="submit" disabled={createFeature.isPending} className="h-8 rounded-md bg-primary px-3 text-[12px] font-medium text-primary-foreground disabled:opacity-50">
                   {createFeature.isPending ? "Creating…" : "Create feature"}
                 </button>

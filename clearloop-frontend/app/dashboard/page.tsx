@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { useWorkspaceStats } from "@/lib/hooks/useWorkspace";
 import { useFeatures } from "@/lib/hooks/useFeatures";
 import { useBugs } from "@/lib/hooks/useBugs";
@@ -63,6 +63,10 @@ const SEVERITIES = [
 const isUnresolved = (status: string) =>
   status !== "RESOLVED" && status !== "CLOSED";
 
+const subscribeToHydration = () => () => {};
+const getClientHydrationSnapshot = () => true;
+const getServerHydrationSnapshot = () => false;
+
 export default function DashboardPage() {
   const { data: stats, isLoading } = useWorkspaceStats();
   const { data: features } = useFeatures();
@@ -73,8 +77,11 @@ export default function DashboardPage() {
   // Week labels come from the clock, and this route prerenders — so the trend
   // chart only renders once mounted, otherwise the build-time weeks would not
   // match the ones the browser computes on hydration.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useSyncExternalStore(
+    subscribeToHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot,
+  );
 
   const openBugs = useMemo(
     () => (bugs || []).filter((bug) => isUnresolved(bug.status)),

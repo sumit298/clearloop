@@ -9,6 +9,7 @@ import { useUsers } from "@/lib/hooks/useUsers";
 import { useInvitations, useCreateInvitation, useResendInvitation, useCancelInvitation } from "@/lib/hooks/useInvitations";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import type { Invitation } from "@/lib/api/invitations";
+import { getErrorMessage } from "@/lib/api/errors";
 
 const ROLES: Invitation["role"][] = ["ADMIN", "MANAGER", "DEVELOPER", "VIEWER"];
 
@@ -39,13 +40,13 @@ export default function TeamPage() {
       setForm({ email: "", role: "DEVELOPER" });
       if (!result.emailSent) setError(`Invitation created but the email to ${result.email} could not be delivered. Use Resend to retry.`);
     }
-    catch (err: any) { setError(err.response?.data?.message || "Failed to send invitation"); }
+    catch (err: unknown) { setError(getErrorMessage(err, "Failed to send invitation")); }
   };
 
   const handleResend = async (id: string) => {
     setResendingId(id);
     try { await resendInvitation.mutateAsync(id); }
-    catch (err: any) { setError(err.response?.data?.message || "Failed to resend"); }
+    catch (err: unknown) { setError(getErrorMessage(err, "Failed to resend")); }
     finally { setResendingId(null); }
   };
 

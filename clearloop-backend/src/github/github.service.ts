@@ -529,7 +529,7 @@ export class GithubService {
           );
           break;
         case 'closed':
-          result = await this.handlePRClosed(tenantId, pull_request, featureId);
+          result = await this.handlePRClosed(tenantId, pull_request);
           break;
         case 'reopened':
           result = await this.handlePRReopened(tenantId, pull_request);
@@ -679,11 +679,7 @@ export class GithubService {
     return result;
   }
 
-  private async handlePRClosed(
-    tenantId: string,
-    pr: any,
-    featureId: string | null,
-  ) {
+  private async handlePRClosed(tenantId: string, pr: any) {
     const pullRequest = await this.prisma.pullRequest.findUnique({
       where: { githubNodeId: pr.node_id },
     });
@@ -887,7 +883,7 @@ export class GithubService {
     branchName: string,
     prBody: string | null,
   ): Promise<string | null> {
-    const bugMatch = branchName.match(/bug[\\/\-]([a-f0-9-]{36})/i);
+    const bugMatch = branchName.match(/bug[\\/-]([a-f0-9-]{36})/i);
     if (bugMatch) {
       const bugId = bugMatch[1];
       const bug = await this.prisma.bugReport.findFirst({
@@ -909,8 +905,8 @@ export class GithubService {
     }
 
     const featurePatterns = [
-      /feature[\\/\-]([a-f0-9-]{36})/i,
-      /feat[\\/\-]([a-f0-9-]{36})/i,
+      /feature[\\/-]([a-f0-9-]{36})/i,
+      /feat[\\/-]([a-f0-9-]{36})/i,
     ];
 
     for (const pattern of featurePatterns) {
@@ -928,7 +924,7 @@ export class GithubService {
     // free text for the developer's benefit and is ignored when matching, so
     // renaming it never breaks the link.
     const keyMatch = branchName.match(
-      /(?:feature|feat|bug|fix)[\\/\-]([a-z][a-z0-9]{1,9}-\d+)(?:[-_/]|$)/i,
+      /(?:feature|feat|bug|fix)[\\/-]([a-z][a-z0-9]{1,9}-\d+)(?:[-_/]|$)/i,
     );
     if (keyMatch && keyMatch[1]) {
       const key = keyMatch[1].toUpperCase();
@@ -958,7 +954,10 @@ export class GithubService {
         return bug.featureId;
       }
 
-      this.logger.warn(`No feature or bug found for key ${key}`, 'GithubService');
+      this.logger.warn(
+        `No feature or bug found for key ${key}`,
+        'GithubService',
+      );
     }
 
     if (prBody) {
@@ -1039,7 +1038,11 @@ export class GithubService {
         },
       });
 
-      return { message: 'PR linked to feature successfully', assignedToId: feature.assignedToId, featureTitle: feature.title };
+      return {
+        message: 'PR linked to feature successfully',
+        assignedToId: feature.assignedToId,
+        featureTitle: feature.title,
+      };
     });
 
     if (result.assignedToId && result.assignedToId !== memberId) {

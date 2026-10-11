@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useCallback, useContext, useState, useEffect } from "react";
 import { authApi } from "../api/auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { workspaceApi } from "../api/workspace";
@@ -40,6 +40,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const logout = useCallback(() => {
+    setUser(null);
+    setWorkspaceState(null);
+    setToken(null);
+    localStorage.removeItem("token");
+    localStorage.removeItem("workspace");
+    queryClient.clear();
+  }, [queryClient]);
+
   useEffect(() => {
     const loadAuthState = async () => {
       try {
@@ -54,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             ]);
             setUser(userData);
             setWorkspaceState(workspaceData);
-          } catch (error) {
+          } catch {
             logout();
           }
         }
@@ -66,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     loadAuthState();
-  }, []);
+  }, [logout]);
 
   const login = async (newToken: string) => {
     setToken(newToken);
@@ -83,15 +92,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error("Failed to fetch user data:", error);
       throw error;
     }
-  };
-
-  const logout = () => {
-    setUser(null);
-    setWorkspaceState(null);
-    setToken(null);
-    localStorage.removeItem("token");
-    localStorage.removeItem("workspace");
-    queryClient.clear();
   };
 
   const switchWorkspace = async (tenantId: string) => {
