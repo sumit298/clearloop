@@ -19,7 +19,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env'  }),
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     LoggerModule,
     NotificationsModule,
     PrismaModule,

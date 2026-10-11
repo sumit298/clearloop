@@ -47,7 +47,9 @@ export class CommentsController {
     if (bugReportId) {
       return this.commentsService.findByBugReport(req.tenantId, bugReportId);
     }
-    return { message: 'Please provide featureId or bugReportId query parameter' };
+    return {
+      message: 'Please provide featureId or bugReportId query parameter',
+    };
   }
 
   @Get(':id')

@@ -14,10 +14,7 @@ async function bootstrap() {
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
 
   app.enableCors({
-    origin: [
-      'https://clearloop-nu.vercel.app',
-      'http://localhost:3000',
-    ],
+    origin: ['https://clearloop-nu.vercel.app', 'http://localhost:3000'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -27,7 +24,7 @@ async function bootstrap() {
   app.use(
     '/github/webhook',
     bodyParser.json({
-      limit: "10mb",
+      limit: '10mb',
       verify: (req: any, res, buf) => {
         req.rawBody = buf;
       },
@@ -46,9 +43,11 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 8000;
   await app.listen(port);
-  
+
   const logger = app.get(WINSTON_MODULE_NEST_PROVIDER);
-  logger.log(`🚀 Application is running on: http://localhost:${port}`, 'Bootstrap');
+  logger.log(
+    `🚀 Application is running on: http://localhost:${port}`,
+    'Bootstrap',
+  );
 }
 bootstrap();
-

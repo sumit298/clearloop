@@ -61,7 +61,11 @@ export class ProjectsController {
     @Param('id') projectId: string,
     @Body() dto: AddMemberDto,
   ) {
-    return this.projectsService.addMember(req.tenantId, projectId, dto.memberId);
+    return this.projectsService.addMember(
+      req.tenantId,
+      projectId,
+      dto.memberId,
+    );
   }
 
   @Delete(':id/members/:memberId')

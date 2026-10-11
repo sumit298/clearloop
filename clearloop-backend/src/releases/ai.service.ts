@@ -51,32 +51,33 @@ Make descriptions action-oriented and clear (e.g., "Users can now retrieve...", 
           responseSchema: {
             type: Type.OBJECT,
             properties: {
-              newFeatures: { 
-                type: Type.ARRAY, 
-                items: { type: Type.STRING }, 
-                description: 'New features introduced.' 
+              newFeatures: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: 'New features introduced.',
               },
-              enhancements: { 
-                type: Type.ARRAY, 
-                items: { type: Type.STRING }, 
-                description: 'Refinements, performance upgrades, or security hardening.' 
+              enhancements: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description:
+                  'Refinements, performance upgrades, or security hardening.',
               },
-              chores: { 
-                type: Type.ARRAY, 
-                items: { type: Type.STRING }, 
-                description: 'Housekeeping, refactoring without visible impact, or package updates.' 
-              }
+              chores: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description:
+                  'Housekeeping, refactoring without visible impact, or package updates.',
+              },
             },
-            required: ['newFeatures', 'enhancements', 'chores']
-          }
-        }
+            required: ['newFeatures', 'enhancements', 'chores'],
+          },
+        },
       });
 
       if (!response.text) return null;
 
       const rawData = JSON.parse(response.text.trim());
       return this.buildCodeRabbitMarkdown(rawData);
-
     } catch (error) {
       this.logger.error('Failed to generate CodeRabbit-style review:', error);
       return null;

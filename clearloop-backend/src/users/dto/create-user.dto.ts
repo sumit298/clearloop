@@ -1,23 +1,28 @@
-import { UserRole } from "@prisma/client";
-import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { UserRole } from '@prisma/client';
+import {
+  IsEmail,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class CreateUserDto {
-    @IsEmail()
-    email!: string;
+  @IsEmail()
+  email!: string;
 
-    @IsNotEmpty()
-    @IsString()
-    name!: string;
- 
-    @IsEnum(UserRole)
-    role!: UserRole
+  @IsNotEmpty()
+  @IsString()
+  name!: string;
 
-    @IsString()
-    @IsOptional()
-    designation?: string;
+  @IsEnum(UserRole)
+  role!: UserRole;
 
-    @IsString()
-    @IsOptional()
-    githubUsername?: string
+  @IsString()
+  @IsOptional()
+  designation?: string;
 
+  @IsString()
+  @IsOptional()
+  githubUsername?: string;
 }

@@ -1,32 +1,37 @@
-import { FeatureStatus, FeaturePriority } from "@prisma/client";
-import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID } from "class-validator";
+import { FeatureStatus, FeaturePriority } from '@prisma/client';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
 export class CreateFeatureDto {
-    @IsString()
-    @IsNotEmpty({ message: 'Title is required' })
-    title!: string;
+  @IsString()
+  @IsNotEmpty({ message: 'Title is required' })
+  title!: string;
 
-    @IsString()
-    @IsOptional()
-    description?: string;
+  @IsString()
+  @IsOptional()
+  description?: string;
 
-    @IsString()
-    @IsOptional()
-    reason?: string;
+  @IsString()
+  @IsOptional()
+  reason?: string;
 
-    @IsUUID()
-    @IsNotEmpty()
-    projectId!: string;
+  @IsUUID()
+  @IsNotEmpty()
+  projectId!: string;
 
-    @IsEnum(FeaturePriority)
-    @IsOptional()
-    priority?: FeaturePriority;
+  @IsEnum(FeaturePriority)
+  @IsOptional()
+  priority?: FeaturePriority;
 
-    @IsUUID()
-    @IsOptional()
-    assignedToId?: string;
+  @IsUUID()
+  @IsOptional()
+  assignedToId?: string;
 }
-
 
 export class UpdateFeatureDto {
   @IsString()

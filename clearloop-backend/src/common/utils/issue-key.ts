@@ -88,5 +88,7 @@ export function bugBranchName(bug: {
 }): string {
   if (!bug.key) return `bug/${bug.id}`;
   const slug = slugify(bug.title);
-  return slug ? `bug/${bug.key.toLowerCase()}-${slug}` : `bug/${bug.key.toLowerCase()}`;
+  return slug
+    ? `bug/${bug.key.toLowerCase()}-${slug}`
+    : `bug/${bug.key.toLowerCase()}`;
 }

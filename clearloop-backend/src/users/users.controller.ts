@@ -44,8 +44,7 @@ export class UsersController {
     return this.userService.findOne(req.tenantId, id);
   }
 
-
-  @Patch("me")
+  @Patch('me')
   updateOwnProfile(
     @Request() req: AuthenticatedRequest,
     @Body() dto: UpdateOwnProfileDto,
@@ -55,7 +54,7 @@ export class UsersController {
       req.user.memberId,
       dto,
     );
-  } 
+  }
 
   @Patch(':id')
   @Roles('ADMIN', 'MANAGER')
@@ -64,8 +63,10 @@ export class UsersController {
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,
   ) {
-    if(id === req.user.memberId) {
-      throw new ForbiddenException("Use Patch /users/me to update your own profile")
+    if (id === req.user.memberId) {
+      throw new ForbiddenException(
+        'Use Patch /users/me to update your own profile',
+      );
     }
     return this.userService.update(req.tenantId, id, req.user.role, dto);
   }

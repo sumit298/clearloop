@@ -30,7 +30,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       if (request.query.state) {
         tenant = JSON.parse(request.query.state).tenant;
       }
-    } catch (err) {
+    } catch {
       tenant = null;
     }
 

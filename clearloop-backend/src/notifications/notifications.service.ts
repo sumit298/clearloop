@@ -36,8 +36,7 @@ export class NotificationsService {
   async create(tenantId: string, memberId: string, dto: CreateNotificationDTO) {
     try {
       const deduplicationKey =
-        dto.deduplicationKey ??
-        `${dto.eventType}-${memberId}-${Date.now()}`;
+        dto.deduplicationKey ?? `${dto.eventType}-${memberId}-${Date.now()}`;
 
       // Create first and let the database unique constraint arbitrate races.
       // A read-before-upsert can let two concurrent requests both broadcast
@@ -81,7 +80,10 @@ export class NotificationsService {
       // Only push live events for genuinely new notifications.
       if (isNew) {
         this.push(memberId, { type: 'NOTIFICATION', data: notification });
-        this.push(memberId, { type: 'SUMMARY', data: { [notification.severity]: 1 } });
+        this.push(memberId, {
+          type: 'SUMMARY',
+          data: { [notification.severity]: 1 },
+        });
       }
 
       return notification;

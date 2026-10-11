@@ -11,10 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { FeaturesService } from './features.service';
-import {
-  CreateFeatureDto,
-  UpdateFeatureDto,
-} from './dto/create-feature.dto';
+import { CreateFeatureDto, UpdateFeatureDto } from './dto/create-feature.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
@@ -27,7 +24,10 @@ export class FeaturesController {
 
   @Post()
   @Roles('ADMIN', 'MANAGER', 'DEVELOPER')
-  create(@Request() req: AuthenticatedRequest, @Body() createFeatureDto: CreateFeatureDto) {
+  create(
+    @Request() req: AuthenticatedRequest,
+    @Body() createFeatureDto: CreateFeatureDto,
+  ) {
     return this.featuresService.create(
       req.tenantId,
       req.user.memberId,
@@ -36,7 +36,10 @@ export class FeaturesController {
   }
 
   @Get()
-  findAll(@Request() req: AuthenticatedRequest, @Query('projectId') projectId?: string) {
+  findAll(
+    @Request() req: AuthenticatedRequest,
+    @Query('projectId') projectId?: string,
+  ) {
     return this.featuresService.findAll(req.tenantId, projectId);
   }
 

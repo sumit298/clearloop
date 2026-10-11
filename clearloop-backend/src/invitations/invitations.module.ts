@@ -7,12 +7,7 @@ import { AuthModule } from '../auth/auth.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [
-    PrismaModule,
-    EmailModule,
-    AuthModule,
-    NotificationsModule
-  ],
+  imports: [PrismaModule, EmailModule, AuthModule, NotificationsModule],
   controllers: [InvitationsController],
   providers: [InvitationsService],
   exports: [InvitationsService],

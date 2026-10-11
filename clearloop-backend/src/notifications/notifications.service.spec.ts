@@ -80,9 +80,7 @@ describe('NotificationsService', () => {
     };
     notification.create.mockResolvedValue(created);
 
-    const event = firstValueFrom(
-      service.getStream('member-id').pipe(take(1)),
-    );
+    const event = firstValueFrom(service.getStream('member-id').pipe(take(1)));
     await service.create('tenant-id', 'member-id', {
       eventType: 'TEST',
       title: 'Test',

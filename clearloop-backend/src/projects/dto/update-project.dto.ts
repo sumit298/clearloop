@@ -1,25 +1,25 @@
-import { IsNotEmpty, IsOptional, IsString, IsUrl } from "class-validator";
+import { IsNotEmpty, IsOptional, IsString, IsUrl } from 'class-validator';
 
 export class UpdateProjectDto {
-    @IsString()
-    @IsOptional()
-    name?: string;
+  @IsString()
+  @IsOptional()
+  name?: string;
 
-    @IsString()
-    @IsOptional()
-    description?: string;
+  @IsString()
+  @IsOptional()
+  description?: string;
 
-    @IsUrl()
-    @IsOptional()
-    githubRepoUrl?: string;
+  @IsUrl()
+  @IsOptional()
+  githubRepoUrl?: string;
 
-    @IsString()
-    @IsOptional()
-    githubRepoId?: string;
+  @IsString()
+  @IsOptional()
+  githubRepoId?: string;
 
-    @IsString()
-    @IsOptional()
-    githubInstallationId?: string;
+  @IsString()
+  @IsOptional()
+  githubInstallationId?: string;
 }
 
 export class AddMemberDto {

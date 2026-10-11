@@ -105,7 +105,7 @@ export class InvitationsService {
       console.error('Failed to send invitation email:', error);
     }
 
-    return {...invitation, emailSent};
+    return { ...invitation, emailSent };
   }
 
   async validate(rawToken: string) {
@@ -230,14 +230,18 @@ export class InvitationsService {
     });
 
     if (invitation.invitedByMemberId) {
-      await this.notifications.notifySafely(invitation.tenantId, invitation.invitedByMemberId, {
-        eventType: 'INVITATION_ACCEPTED',
-        title: 'Invitation accepted',
-        message: `${name} has joined the workspace`,
-        severity: 'INFO',
-        actorName: name,
-        deduplicationKey: `INVITATION_ACCEPTED-${invitation.id}`,
-      });
+      await this.notifications.notifySafely(
+        invitation.tenantId,
+        invitation.invitedByMemberId,
+        {
+          eventType: 'INVITATION_ACCEPTED',
+          title: 'Invitation accepted',
+          message: `${name} has joined the workspace`,
+          severity: 'INFO',
+          actorName: name,
+          deduplicationKey: `INVITATION_ACCEPTED-${invitation.id}`,
+        },
+      );
     }
 
     return result;

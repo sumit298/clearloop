@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateProjectDto } from './dto/create-project.dto';
 import type { UpdateProjectDto } from './dto/update-project.dto';
@@ -9,9 +13,9 @@ import { deriveProjectKey, nextFreeKey } from '../common/utils/issue-key';
 export class ProjectsService {
   constructor(private prisma: PrismaService) {}
 
-   // NOTE: githubRepoUrl removed here. Repo linkage now lives on the
-    // GitHubRepository model (Phase 3), connected via GitHubRepository.projectId,
-    // not stored directly on Project. Revisit once the GitHub module is rebuilt.
+  // NOTE: githubRepoUrl removed here. Repo linkage now lives on the
+  // GitHubRepository model (Phase 3), connected via GitHubRepository.projectId,
+  // not stored directly on Project. Revisit once the GitHub module is rebuilt.
 
   async create(tenantId: string, dto: CreateProjectDto) {
     // Allocation reads the taken keys and then writes, so two concurrent
@@ -170,7 +174,7 @@ export class ProjectsService {
       data: {
         projectId,
         memberId,
-        tenantId
+        tenantId,
       },
       include: {
         member: {

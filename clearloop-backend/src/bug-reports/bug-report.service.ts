@@ -153,7 +153,7 @@ export class BugReportsService {
         select: { assignedToId: true, title: true },
       });
       if (feature?.assignedToId && feature.assignedToId !== memberId) {
-      await this.notifications.notifySafely(tenantId, feature.assignedToId, {
+        await this.notifications.notifySafely(tenantId, feature.assignedToId, {
           eventType: 'BUG_REPORTED',
           title: 'New bug reported on your feature',
           message: `"${dto.title}" was reported on "${feature.title}"`,
@@ -273,8 +273,12 @@ export class BugReportsService {
     if (dto.featureId !== undefined || dto.projectId !== undefined) {
       projectId = await this.resolveProjectId(
         tenantId,
-        dto.featureId !== undefined ? dto.featureId : (bugReport.featureId ?? undefined),
-        dto.projectId !== undefined ? dto.projectId : (bugReport.projectId ?? undefined),
+        dto.featureId !== undefined
+          ? dto.featureId
+          : (bugReport.featureId ?? undefined),
+        dto.projectId !== undefined
+          ? dto.projectId
+          : (bugReport.projectId ?? undefined),
       );
     }
 
