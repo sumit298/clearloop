@@ -260,9 +260,13 @@ export class GithubService {
     if (!Number.isInteger(prNumber) || prNumber <= 0) {
       throw new BadRequestException('Invalid PR number');
     }
+    const safePrNumber = Math.trunc(prNumber);
+    if (!Number.isSafeInteger(safePrNumber) || safePrNumber <= 0) {
+      throw new BadRequestException('Invalid PR number');
+    }
 
     const url = new URL(
-      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${prNumber}`,
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${safePrNumber}`,
       'https://api.github.com',
     );
     const response = await fetch(url.toString(), {
